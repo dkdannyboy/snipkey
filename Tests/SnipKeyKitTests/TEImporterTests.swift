@@ -172,6 +172,91 @@ final class TEImporterTests: XCTestCase {
         try? FileManager.default.removeItem(at: tmp)
     }
 
+    // MARK: - Import must not claim success it did not achieve
+
+    /// Importing into an unreadable store must fail loudly, not report a count
+    /// for snippets that only ever existed in memory.
+    func testImportIsRefusedWhileStoreIsUnreadable() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snipkey-import-blocked-\(UUID().uuidString).json")
+        let corrupt = Data("{ not json".utf8)
+        try corrupt.write(to: tmp)
+
+        let store = Store(fileURL: tmp)
+        XCTAssertTrue(store.isReadOnlyUntilRecovered)
+
+        let outcome = store.importGroups([
+            SnippetGroup(name: "Imported", snippets: [Snippet(abbreviation: ";i", content: "x")]),
+        ])
+        XCTAssertEqual(outcome, .blockedByLoadFailure)
+        XCTAssertFalse(outcome.didSave)
+        XCTAssertTrue(store.groups.isEmpty, "import must not mutate the library it cannot save")
+        XCTAssertEqual(try Data(contentsOf: tmp), corrupt)
+
+        try? FileManager.default.removeItem(at: tmp)
+        if let backup = store.loadFailure?.backupURL {
+            try? FileManager.default.removeItem(at: backup)
+        }
+    }
+
+    func testImportReportsSavedWhenItReachesDisk() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snipkey-import-ok-\(UUID().uuidString).json")
+        let store = Store(fileURL: tmp)
+
+        let outcome = store.importGroups([
+            SnippetGroup(name: "Imported", snippets: [Snippet(abbreviation: ";i", content: "x")]),
+        ])
+        XCTAssertEqual(outcome, .saved)
+
+        let reloaded = Store(fileURL: tmp)
+        XCTAssertEqual(reloaded.groups.map(\.name), ["Imported"])
+
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    /// After recovery, importing works again and actually persists.
+    func testImportWorksAfterStartingFresh() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snipkey-import-recover-\(UUID().uuidString).json")
+        try Data("{ broken".utf8).write(to: tmp)
+
+        let store = Store(fileURL: tmp)
+        XCTAssertEqual(store.importGroups([SnippetGroup(name: "A")]), .blockedByLoadFailure)
+
+        store.startFreshDiscardingUnreadableStore()
+        XCTAssertEqual(store.importGroups([SnippetGroup(name: "A")]), .saved)
+        XCTAssertEqual(Store(fileURL: tmp).groups.map(\.name), ["A"])
+
+        try? FileManager.default.removeItem(at: tmp)
+        if let backup = store.loadFailure?.backupURL {
+            try? FileManager.default.removeItem(at: backup)
+        }
+    }
+
+    /// A save must encode a snapshot taken at mutation time, so edits that land
+    /// while a write is in flight cannot corrupt what gets written.
+    func testConcurrentEditsDuringSaveDoNotCorruptTheFile() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snipkey-race-\(UUID().uuidString).json")
+        let store = Store(fileURL: tmp)
+
+        for i in 0..<200 {
+            store.groups = [SnippetGroup(name: "G\(i)", snippets: [
+                Snippet(abbreviation: ";\(i)", content: "v\(i)"),
+            ])]
+            _ = store.saveNow()
+        }
+
+        // Whatever landed must be complete, decodable JSON — never a torn write.
+        let reloaded = Store(fileURL: tmp)
+        XCTAssertNil(reloaded.loadFailure)
+        XCTAssertEqual(reloaded.groups.count, 1)
+        XCTAssertEqual(reloaded.groups[0].name, "G199")
+
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
     func testStoreRoundTrip() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("snipkey-test-\(UUID().uuidString).json")

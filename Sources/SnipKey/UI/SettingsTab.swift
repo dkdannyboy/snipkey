@@ -130,12 +130,18 @@ struct SettingsTab: View {
     private func runImport(_ folder: URL) {
         do {
             let result = try TEImporter.importFolder(folder)
-            store.mergeImported(groups: result.groups)
-            var msg = "Imported \(result.snippetCount) snippets in \(result.groups.count) groups from \(result.sourcePath)."
-            if result.richTextCount > 0 {
-                msg += " \(result.richTextCount) formatted snippets were converted to plain text."
+            switch store.importGroups(result.groups) {
+            case .saved:
+                var msg = "Imported \(result.snippetCount) snippets in \(result.groups.count) groups from \(result.sourcePath)."
+                if result.richTextCount > 0 {
+                    msg += " \(result.richTextCount) formatted snippets were converted to plain text."
+                }
+                importMessage = msg
+            case .blockedByLoadFailure:
+                importMessage = "Nothing was imported. SnipKey cannot read your existing snippet library and will not overwrite it — resolve that above first."
+            case .failed(let message):
+                importMessage = "Nothing was imported. Saving failed: \(message)"
             }
-            importMessage = msg
         } catch {
             importMessage = "Import failed: \(error.localizedDescription)"
         }

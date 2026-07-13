@@ -197,8 +197,14 @@ struct OnboardingView: View {
     private func runImport(_ folder: URL) {
         do {
             let result = try TEImporter.importFolder(folder)
-            store.mergeImported(groups: result.groups)
-            importSummary = "Imported \(result.snippetCount) snippets in \(result.groups.count) groups. Welcome back!"
+            switch store.importGroups(result.groups) {
+            case .saved:
+                importSummary = "Imported \(result.snippetCount) snippets in \(result.groups.count) groups. Welcome back!"
+            case .blockedByLoadFailure:
+                importSummary = "Nothing was imported — SnipKey could not read the snippet library already on this Mac and will not overwrite it. Open Settings to retry that file or start fresh, then import again."
+            case .failed(let message):
+                importSummary = "Nothing was imported. Saving failed: \(message)"
+            }
         } catch {
             importSummary = "Import failed: \(error.localizedDescription)"
         }
@@ -216,10 +222,21 @@ struct OnboardingView: View {
     }
 
     private func startFresh() {
+        guard !store.isReadOnlyUntilRecovered else {
+            importSummary = "SnipKey could not read the snippet library already on this Mac. Open Settings to retry that file or discard it before adding snippets."
+            return
+        }
         if !store.groups.contains(where: { $0.name == "Getting Started" }) {
             store.groups.append(Store.starterGroup())
         }
-        importSummary = "Added a “Getting Started” group with sample snippets."
+        switch store.saveNow() {
+        case .saved:
+            importSummary = "Added a “Getting Started” group with sample snippets."
+        case .blockedByLoadFailure:
+            importSummary = "SnipKey could not read the snippet library already on this Mac, so nothing was saved."
+        case .failed(let message):
+            importSummary = "Could not save the sample snippets: \(message)"
+        }
     }
 
     // MARK: Step 4 — Try it

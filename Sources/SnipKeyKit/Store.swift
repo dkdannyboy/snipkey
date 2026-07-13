@@ -16,6 +16,17 @@ public final class Store: ObservableObject {
         public let backupURL: URL?
     }
 
+    /// What happened when a save was attempted. Anything that reports success to
+    /// the user must look at this rather than assuming the write landed.
+    public enum SaveOutcome: Equatable {
+        case saved
+        /// The existing store could not be read, so writing would destroy it.
+        case blockedByLoadFailure
+        case failed(String)
+
+        public var didSave: Bool { self == .saved }
+    }
+
     @Published public var groups: [SnippetGroup] { didSet { scheduleSave(); rebuildIndex() } }
     @Published public var macros: [HotkeyMacro] { didSet { scheduleSave() } }
     @Published public var settings: AppSettings { didSet { scheduleSave() } }
@@ -203,6 +214,10 @@ public final class Store: ObservableObject {
         groups[gi].snippets.removeAll { $0.id == id }
     }
 
+    /// True while the store file could not be read. No change can be persisted
+    /// until the user recovers or explicitly starts fresh.
+    public var isReadOnlyUntilRecovered: Bool { loadFailure != nil }
+
     /// Merges imported groups. Groups with the same name are replaced.
     public func mergeImported(groups imported: [SnippetGroup]) {
         var current = groups
@@ -214,6 +229,18 @@ public final class Store: ObservableObject {
             }
         }
         groups = current
+    }
+
+    /// Merges imported groups and writes them, reporting whether the import
+    /// actually reached disk. Migration is the one place where "it looked like
+    /// it worked" is the worst possible outcome, so this refuses to run at all
+    /// while the store is unreadable — importing into an in-memory library that
+    /// can never be saved would quietly lose the user's snippets.
+    @discardableResult
+    public func importGroups(_ imported: [SnippetGroup]) -> SaveOutcome {
+        guard !isReadOnlyUntilRecovered else { return .blockedByLoadFailure }
+        mergeImported(groups: imported)
+        return saveNow()
     }
 
     // MARK: - Persistence
@@ -237,34 +264,59 @@ public final class Store: ObservableObject {
         matcherLock.unlock()
     }
 
-    private func scheduleSave() {
-        guard !isSavingBlocked else { return }
-        saveWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.saveNow() }
-        saveWorkItem = item
-        saveQueue.asyncAfter(deadline: .now() + 0.5, execute: item)
-    }
-
-    public func saveNow() {
-        // Refuse to write over a store we could not read. Overwriting it would
-        // destroy whatever snippets it still holds.
-        guard !isSavingBlocked else {
-            NSLog("SnipKey: save skipped — the existing store could not be read")
-            return
-        }
-        let data = StoreData(
+    /// Copies the current state. Must run on whatever thread owns the store's
+    /// properties (the main thread in the app), never on the save queue — the
+    /// background writer must encode an immutable snapshot, not live arrays the
+    /// UI may be mutating underneath it.
+    private func snapshot() -> StoreData {
+        StoreData(
             groups: groups,
             macros: macros,
             settings: settings,
             expansionCount: expansionCount
         )
+    }
+
+    private func snapshotFromAnyThread() -> StoreData {
+        if Thread.isMainThread { return snapshot() }
+        return DispatchQueue.main.sync { self.snapshot() }
+    }
+
+    /// Called from the property observers, i.e. on the thread that made the
+    /// change. The snapshot is taken here, so the queued write cannot race with
+    /// further edits.
+    private func scheduleSave() {
+        guard !isSavingBlocked else { return }
+        let data = snapshot()
+        saveWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in _ = self?.write(data) }
+        saveWorkItem = item
+        saveQueue.asyncAfter(deadline: .now() + 0.5, execute: item)
+    }
+
+    /// Writes immediately and reports what happened. Callers that tell the user
+    /// something was saved — importing, in particular — must check this.
+    @discardableResult
+    public func saveNow() -> SaveOutcome {
+        // Refuse to write over a store we could not read. Overwriting it would
+        // destroy whatever snippets it still holds.
+        guard !isSavingBlocked else { return .blockedByLoadFailure }
+        let data = snapshotFromAnyThread()
+        saveWorkItem?.cancel()
+        return saveQueue.sync { write(data) }
+    }
+
+    private func write(_ data: StoreData) -> SaveOutcome {
+        guard !isSavingBlocked else { return .blockedByLoadFailure }
         do {
             let dir = fileURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let raw = try JSONEncoder.snipKey.encode(data)
             try raw.write(to: fileURL, options: .atomic)
+            return .saved
         } catch {
             NSLog("SnipKey: failed to save store: \(error)")
+            return .failed(error.localizedDescription)
         }
     }
 
