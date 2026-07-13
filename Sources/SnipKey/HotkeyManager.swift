@@ -12,18 +12,54 @@ final class HotkeyManager {
     private var handlerInstalled = false
     private var cancellable: AnyCancellable?
 
+    private var settingsCancellable: AnyCancellable?
+
     init(store: Store) {
         self.store = store
         cancellable = store.$macros
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.registerAll() }
+        // The inline-search shortcut lives in settings, so re-register on change.
+        settingsCancellable = store.$settings
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.registerAll() }
     }
+
+    /// Called when the inline-search hotkey fires.
+    var onInlineSearch: (() -> Void)?
+    private var inlineSearchHotkeyID: UInt32?
 
     func registerAll() {
         installHandlerIfNeeded()
         unregisterAll()
         for macro in store.macros where macro.enabled && macro.hasHotkey {
             register(macro)
+        }
+        registerInlineSearch()
+    }
+
+    private func registerInlineSearch() {
+        let settings = store.settings
+        guard settings.inlineSearchEnabled, settings.inlineSearchKeyCode != 0 else { return }
+
+        let id = nextID
+        nextID += 1
+        let hotKeyID = EventHotKeyID(signature: OSType(0x534E_4B59), id: id)
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            settings.inlineSearchKeyCode,
+            settings.inlineSearchModifiers,
+            hotKeyID,
+            GetEventDispatcherTarget(),
+            0,
+            &ref
+        )
+        if status == noErr, let ref {
+            refs[id] = ref
+            inlineSearchHotkeyID = id
+            Log.write("inline-search hotkey registered (\(HotkeyFormatter.description(keyCode: settings.inlineSearchKeyCode, carbonModifiers: settings.inlineSearchModifiers)))")
+        } else {
+            Log.write("inline-search hotkey FAILED to register (status \(status)) — another app may already own it")
         }
     }
 
@@ -33,6 +69,7 @@ final class HotkeyManager {
         }
         refs.removeAll()
         macroByHotkeyID.removeAll()
+        inlineSearchHotkeyID = nil
     }
 
     private func register(_ macro: HotkeyMacro) {
@@ -91,6 +128,10 @@ final class HotkeyManager {
     }
 
     private func fire(id: UInt32) {
+        if id == inlineSearchHotkeyID {
+            onInlineSearch?()
+            return
+        }
         guard let macro = macroByHotkeyID[id] else { return }
         ActionRunner.run(macro, store: store)
     }

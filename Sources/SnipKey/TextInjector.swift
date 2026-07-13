@@ -27,6 +27,32 @@ enum TextInjector {
         up.post(tap: .cghidEventTap)
     }
 
+    /// Sends a real ⌘V: the Command key is physically pressed and released
+    /// around the V.
+    ///
+    /// Merely setting `.maskCommand` on the V event is not enough. Plenty of
+    /// apps — and every input method — track modifier state from the Command
+    /// key's own down/up events, so a V that merely *claims* to be modified gets
+    /// treated as a plain keystroke and the user sees a literal "v" instead of
+    /// their snippet.
+    private static func postCommandV(source: CGEventSource?) {
+        let command = CGKeyCode(kVK_Command)
+
+        if let down = CGEvent(keyboardEventSource: source, virtualKey: command, keyDown: true) {
+            down.flags = .maskCommand
+            down.post(tap: .cghidEventTap)
+        }
+        usleep(15_000)
+
+        postKey(CGKeyCode(kVK_ANSI_V), flags: .maskCommand, source: source)
+        usleep(15_000)
+
+        if let up = CGEvent(keyboardEventSource: source, virtualKey: command, keyDown: false) {
+            up.flags = []
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
     private static func keyCode(forName name: String) -> CGKeyCode? {
         switch name {
         case "enter", "return": return CGKeyCode(kVK_Return)
@@ -153,8 +179,10 @@ enum TextInjector {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        usleep(60_000)
-        postKey(CGKeyCode(kVK_ANSI_V), flags: .maskCommand, source: source)
+        // Give the pasteboard server time to publish the new contents before
+        // the target app reads them.
+        usleep(80_000)
+        postCommandV(source: source)
     }
 
     /// Waits until the host app has had time to consume the paste, then puts the

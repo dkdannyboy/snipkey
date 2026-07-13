@@ -7,12 +7,19 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let store: Store
     private let openManager: () -> Void
     private let openOnboarding: () -> Void
+    private let openSearch: () -> Void
     private var statusItem: NSStatusItem!
 
-    init(store: Store, openManager: @escaping () -> Void, openOnboarding: @escaping () -> Void) {
+    init(
+        store: Store,
+        openManager: @escaping () -> Void,
+        openOnboarding: @escaping () -> Void,
+        openSearch: @escaping () -> Void
+    ) {
         self.store = store
         self.openManager = openManager
         self.openOnboarding = openOnboarding
+        self.openSearch = openSearch
         super.init()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -53,6 +60,15 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let search = NSMenuItem(
+            title: "Search Snippets… (\(HotkeyFormatter.description(keyCode: store.settings.inlineSearchKeyCode, carbonModifiers: store.settings.inlineSearchModifiers)))",
+            action: #selector(openInlineSearch),
+            keyEquivalent: ""
+        )
+        search.target = self
+        search.isEnabled = store.settings.inlineSearchEnabled
+        menu.addItem(search)
+
         let open = NSMenuItem(title: "Open SnipKey…", action: #selector(openManagerWindow), keyEquivalent: "o")
         open.target = self
         menu.addItem(open)
@@ -83,7 +99,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openManagerWindow() {
-        openManager()
+        DispatchQueue.main.async { [openManager] in
+            openManager()
+        }
+    }
+
+    @objc private func openInlineSearch() {
+        openSearch()
     }
 
     @objc private func openOnboardingWindow() {

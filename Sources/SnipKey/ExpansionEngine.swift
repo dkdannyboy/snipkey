@@ -168,16 +168,31 @@ final class ExpansionEngine {
 
     // MARK: - Expansion
 
+    /// Expands a snippet the user chose from the inline-search palette. Nothing
+    /// was typed, so nothing gets deleted — the text simply lands at the cursor
+    /// in the app they were working in.
+    func expandFromSearch(_ snippet: Snippet, into app: NSRunningApplication?) {
+        // Let focus finish returning to the original app before typing into it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.expand(snippet, backspaces: 0, targetApp: app)
+        }
+    }
+
     private func expand(_ snippet: Snippet) {
+        // The app the abbreviation was typed into. Everything we inject has to
+        // land there, not wherever focus drifts to while we work.
+        expand(
+            snippet,
+            backspaces: snippet.abbreviation.count,
+            targetApp: NSWorkspace.shared.frontmostApplication
+        )
+    }
+
+    private func expand(_ snippet: Snippet, backspaces: Int, targetApp: NSRunningApplication?) {
         let resolved = MacroParser.resolveNested(snippet.content) { [weak self] abbrev in
             self?.store.snippet(forAbbreviation: abbrev)?.content
         }
         let tokens = MacroParser.parse(resolved)
-        let backspaces = snippet.abbreviation.count
-
-        // The app the abbreviation was typed into. Everything we inject has to
-        // land there, not wherever focus drifts to while we work.
-        let targetApp = NSWorkspace.shared.frontmostApplication
 
         if MacroParser.hasFillIns(tokens) {
             let panel = FillInPanel.present(

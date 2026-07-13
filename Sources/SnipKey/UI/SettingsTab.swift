@@ -43,6 +43,24 @@ struct SettingsTab: View {
             }
 
             Section {
+                Toggle("Enable search-anywhere palette", isOn: $store.settings.inlineSearchEnabled)
+                HStack {
+                    Text("Shortcut")
+                    Spacer()
+                    ShortcutRecorderView(
+                        keyCode: $store.settings.inlineSearchKeyCode,
+                        modifiers: $store.settings.inlineSearchModifiers
+                    )
+                    .disabled(!store.settings.inlineSearchEnabled)
+                }
+                Text("Press it while typing in any app to search your snippets by abbreviation, label, or content, then press Return to expand the one you want. Handy when you cannot remember an abbreviation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Search Anywhere")
+            }
+
+            Section {
                 HStack {
                     Image(systemName: accessibilityGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(accessibilityGranted ? .green : .red)

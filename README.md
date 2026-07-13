@@ -6,12 +6,23 @@ everyday parts of Keyboard Maestro.
 
 Native Swift, Apple Silicon, no subscription, no account, no network access.
 
+SnipKey lives in the menu bar (the ⚡ icon) and also keeps a Dock icon. It began
+as a menu-bar-only app, but macOS will not let an accessory app become active,
+so its window opened without keyboard focus — ⌘N went to whatever app was in
+front, and ⌘C/⌘V did not work inside the snippet editor. A Dock icon is a small
+price for a window that behaves like every other window on the Mac.
+
 ---
 
 ## What it does
 
 **Text expansion.** Type an abbreviation in any app and SnipKey replaces it with
 the full text. `;sig` becomes your signature; `;addr` becomes your address.
+
+**Search anywhere (⌘/).** Cannot remember an abbreviation? Press ⌘/ while typing
+in any app, search your whole library by abbreviation, label, or content, and
+press Return to expand the one you want. This is what makes a library of
+hundreds of snippets actually usable.
 
 **TextExpander migration.** Point SnipKey at your existing TextExpander data and
 it imports every group, abbreviation, and snippet — including fill-ins, nested
@@ -101,6 +112,19 @@ SnipKey uses TextExpander's macro syntax, so imported snippets keep working.
 
 Percent signs that aren't macros — like the `%EC%9D%B4` in an encoded URL — are
 left alone.
+
+---
+
+## Keyboard shortcuts
+
+| Shortcut | Where | What |
+|---|---|---|
+| `⌘/` | Any app | Search snippets and expand the one you pick |
+| `↑` `↓` `↩` `⌘1`–`⌘9` `esc` | Search palette | Navigate, expand, jump, close |
+| `⌘F` | SnipKey window | Focus the search field |
+| `⌘N` | SnipKey window | New snippet (scrolls to it and highlights it) |
+
+The search shortcut can be changed or turned off in Settings.
 
 ---
 

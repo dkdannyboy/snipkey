@@ -8,7 +8,7 @@
 # because TCC commits asynchronously and can race with an app relaunch.
 set -u
 
-BUNDLE_ID="com.snipkey.app"
+BUNDLE_ID="io.snipkey.mac"
 LOG=~/Library/Logs/SnipKey.log
 
 grant_once() {
@@ -17,8 +17,15 @@ grant_once() {
   sleep 2
   tccutil reset Accessibility "$BUNDLE_ID" >/dev/null 2>&1
   sleep 1
+
+  # Launch once so the app registers itself in the Accessibility list…
   open /Applications/SnipKey.app
   sleep 5
+  # …then quit it. macOS reverts the switch if the app is running while it is
+  # flipped, so the app must be closed before granting.
+  pkill -f "SnipKey.app" 2>/dev/null
+  sleep 3
+
   open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" >/dev/null 2>&1
   sleep 6
   osascript <<'EOF' >/dev/null 2>&1

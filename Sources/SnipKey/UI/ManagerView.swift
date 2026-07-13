@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SnipKeyKit
 
 struct ManagerView: View {
@@ -19,139 +20,271 @@ struct ManagerView: View {
 
 // MARK: - Snippets
 
+/// How the snippet list is ordered. Mirrors the sort options TextExpander
+/// offers, and is remembered for the session.
+enum SnippetSort: String, CaseIterable, Identifiable {
+    case abbreviation
+    case label
+    case recentlyModified
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .abbreviation: return "Abbreviation"
+        case .label: return "Label"
+        case .recentlyModified: return "Recently Modified"
+        }
+    }
+}
+
 struct SnippetsTab: View {
     @EnvironmentObject var store: Store
+
     @State private var selectedGroupID: UUID?
     @State private var selectedSnippetID: UUID?
     @State private var searchText = ""
+    @State private var sort: SnippetSort = .abbreviation
+    /// Set briefly after a snippet is created so the row can flash.
+    @State private var justAddedID: UUID?
+    @FocusState private var searchFocused: Bool
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     private var selectedGroup: SnippetGroup? {
         store.groups.first { $0.id == selectedGroupID }
     }
 
-    private var visibleSnippets: [Snippet] {
-        let base: [Snippet]
-        if searchText.isEmpty {
-            base = selectedGroup?.snippets ?? []
-        } else {
-            // Search across all groups.
-            base = store.allSnippets.filter {
-                $0.abbreviation.localizedCaseInsensitiveContains(searchText)
-                    || $0.label.localizedCaseInsensitiveContains(searchText)
-                    || $0.content.localizedCaseInsensitiveContains(searchText)
-            }
+    /// Search spans every group; otherwise show the selected group, sorted.
+    private var visibleHits: [SearchHit] {
+        if isSearching {
+            return store.search(searchText)
         }
-        return base
+        guard let group = selectedGroup else { return [] }
+        let hits = group.snippets.map {
+            SearchHit(snippet: $0, groupID: group.id, groupName: group.name, score: 0)
+        }
+        return sorted(hits)
+    }
+
+    private func sorted(_ hits: [SearchHit]) -> [SearchHit] {
+        switch sort {
+        case .abbreviation:
+            return hits.sorted {
+                $0.snippet.abbreviation.localizedCaseInsensitiveCompare($1.snippet.abbreviation) == .orderedAscending
+            }
+        case .label:
+            return hits.sorted {
+                $0.snippet.displayTitle.localizedCaseInsensitiveCompare($1.snippet.displayTitle) == .orderedAscending
+            }
+        case .recentlyModified:
+            return hits.sorted { $0.snippet.modifiedAt > $1.snippet.modifiedAt }
+        }
     }
 
     var body: some View {
         HSplitView {
             groupsSidebar
-                .frame(minWidth: 180, idealWidth: 200, maxWidth: 280)
+                .frame(minWidth: 180, idealWidth: 210, maxWidth: 300)
             snippetList
-                .frame(minWidth: 240, idealWidth: 280, maxWidth: 400)
+                .frame(minWidth: 260, idealWidth: 300, maxWidth: 420)
             editorPane
                 .frame(minWidth: 380, maxWidth: .infinity)
         }
         .onAppear {
             if selectedGroupID == nil { selectedGroupID = store.groups.first?.id }
         }
+        // ⌘N and ⌘F come from the real main menu (see MainMenu.swift). SwiftUI's
+        // .keyboardShortcut is not dependable in an app that starts life without
+        // a menu bar.
+        .onReceive(NotificationCenter.default.publisher(for: .snipKeyNewSnippet)) { _ in
+            addSnippet()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .snipKeyFocusSearch)) { _ in
+            searchFocused = true
+        }
     }
+
+    // MARK: Groups
 
     private var groupsSidebar: some View {
         VStack(spacing: 0) {
             List(selection: $selectedGroupID) {
-                ForEach(store.groups) { group in
-                    HStack {
-                        Text(group.name)
-                        Spacer()
-                        Text("\(group.snippets.count)")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                        if !group.enabled {
-                            Image(systemName: "pause.circle").foregroundStyle(.orange)
+                Section("Groups") {
+                    ForEach(store.groups) { group in
+                        HStack {
+                            Text(group.name)
+                                .foregroundStyle(group.enabled ? .primary : .secondary)
+                            Spacer()
+                            if !group.enabled {
+                                Image(systemName: "pause.circle")
+                                    .foregroundStyle(.orange)
+                                    .help("This group is disabled — none of its snippets expand")
+                            }
+                            Text("\(group.snippets.count)")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
                         }
-                    }
-                    .tag(group.id)
-                    .contextMenu {
-                        Button(group.enabled ? "Disable Group" : "Enable Group") {
-                            toggleGroup(group.id)
-                        }
-                        Button("Rename…") { renameGroup(group.id) }
-                        Divider()
-                        Button("Delete Group", role: .destructive) {
-                            store.removeGroup(id: group.id)
-                            if selectedGroupID == group.id { selectedGroupID = store.groups.first?.id }
+                        .tag(group.id)
+                        .contextMenu {
+                            Button(group.enabled ? "Disable Group" : "Enable Group") {
+                                toggleGroup(group.id)
+                            }
+                            Button("Rename…") { renameGroup(group.id) }
+                            Divider()
+                            Button("Delete Group", role: .destructive) { deleteGroup(group) }
                         }
                     }
                 }
             }
             .listStyle(.sidebar)
-            HStack {
+
+            HStack(spacing: 2) {
                 Button {
-                    let g = store.addGroup(named: "New Group")
-                    selectedGroupID = g.id
+                    let group = store.addGroup(named: "New Group")
+                    selectedGroupID = group.id
+                    searchText = ""
                 } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
-                .help("Add group")
+                .help("New group")
                 Spacer()
+                Text("\(store.allSnippets.count) snippets")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             .padding(8)
         }
     }
 
+    // MARK: Snippet list
+
     private var snippetList: some View {
         VStack(spacing: 0) {
-            TextField("Search all snippets", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .padding(8)
-            List(selection: $selectedSnippetID) {
-                ForEach(visibleSnippets) { snippet in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text(snippet.abbreviation)
-                                .font(.system(.body, design: .monospaced))
-                                .bold()
-                            if !snippet.enabled {
-                                Image(systemName: "pause.circle")
-                                    .foregroundStyle(.orange)
-                                    .font(.caption)
+            searchBar
+
+            if visibleHits.isEmpty {
+                emptyList
+            } else {
+                ScrollViewReader { proxy in
+                    List(selection: $selectedSnippetID) {
+                        ForEach(visibleHits) { hit in
+                            SnippetRow(
+                                hit: hit,
+                                showGroup: isSearching,
+                                isConflicting: conflicts.contains(conflictKey(hit.snippet)),
+                                justAdded: hit.snippet.id == justAddedID
+                            )
+                            .tag(hit.snippet.id)
+                            .id(hit.snippet.id)
+                            .contextMenu {
+                                Button("Duplicate") { duplicate(hit) }
+                                Button(hit.snippet.enabled ? "Disable" : "Enable") { toggleSnippet(hit) }
+                                Divider()
+                                Button("Delete", role: .destructive) {
+                                    store.removeSnippet(id: hit.snippet.id, fromGroup: hit.groupID)
+                                    if selectedSnippetID == hit.snippet.id { selectedSnippetID = nil }
+                                }
                             }
                         }
-                        Text(snippet.label.isEmpty
-                             ? snippet.content.replacingOccurrences(of: "\n", with: " ")
-                             : snippet.label)
-                            .lineLimit(1)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                    .tag(snippet.id)
+                    .onChange(of: justAddedID) { id in
+                        // Bring the brand-new snippet into view so it is obvious
+                        // that something was added.
+                        guard let id else { return }
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
                 }
             }
-            HStack {
+
+            listFooter
+        }
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            TextField("Search all snippets", text: $searchText)
+                .textFieldStyle(.plain)
+                .focused($searchFocused)
+            if !searchText.isEmpty {
                 Button {
-                    addSnippet()
+                    searchText = ""
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        .padding(8)
+    }
+
+    private var emptyList: some View {
+        VStack(spacing: 8) {
+            Image(systemName: isSearching ? "magnifyingglass" : "tray")
+                .font(.largeTitle)
+                .foregroundStyle(.tertiary)
+            if isSearching {
+                Text("No snippets match “\(searchText)”")
+                    .foregroundStyle(.secondary)
+                Button("Clear search") { searchText = "" }
+                    .buttonStyle(.link)
+            } else {
+                Text("This group has no snippets yet")
+                    .foregroundStyle(.secondary)
+                Button("Add one") { addSnippet() }
+                    .buttonStyle(.link)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var listFooter: some View {
+        HStack(spacing: 2) {
+            Button { addSnippet() } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
-                .disabled(selectedGroup == nil)
-                .help("Add snippet")
-                Button {
-                    deleteSelectedSnippet()
-                } label: {
-                    Image(systemName: "minus")
-                }
+                .disabled(store.groups.isEmpty)
+                .help("New snippet (⌘N)")
+
+            Button { deleteSelectedSnippet() } label: { Image(systemName: "minus") }
                 .buttonStyle(.borderless)
                 .disabled(selectedSnippetID == nil)
                 .help("Delete snippet")
-                Spacer()
+
+            Spacer()
+
+            if isSearching {
+                Text("\(visibleHits.count) found")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("", selection: $sort) {
+                    ForEach(SnippetSort.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+                .help("Sort order")
             }
-            .padding(8)
         }
+        .padding(8)
     }
+
+    // MARK: Editor
 
     @ViewBuilder
     private var editorPane: some View {
@@ -159,6 +292,8 @@ struct SnippetsTab: View {
            let (groupID, snippet) = locate(snippetID: snippetID) {
             SnippetEditor(
                 snippet: snippet,
+                conflicts: store.snippetsClaiming(abbreviation: snippet.abbreviation, excluding: snippet.id),
+                focusAbbreviationOnAppear: snippet.id == justAddedID,
                 onChange: { updated in
                     var copy = updated
                     copy.modifiedAt = Date()
@@ -167,15 +302,26 @@ struct SnippetsTab: View {
             )
             .id(snippetID)
         } else {
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 Image(systemName: "text.badge.plus")
                     .font(.system(size: 40))
                     .foregroundStyle(.tertiary)
-                Text("Select a snippet, or press + to create one")
+                Text("Select a snippet to edit it")
                     .foregroundStyle(.secondary)
+                Text("Press ⌘N to create one, or ⌘/ anywhere to search and expand.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: Helpers
+
+    private var conflicts: Set<String> { store.conflictingAbbreviations() }
+
+    private func conflictKey(_ snippet: Snippet) -> String {
+        snippet.caseSensitive ? snippet.abbreviation : snippet.abbreviation.lowercased()
     }
 
     private func locate(snippetID: UUID) -> (UUID, Snippet)? {
@@ -188,10 +334,50 @@ struct SnippetsTab: View {
     }
 
     private func addSnippet() {
+        // A new snippet belongs in a visible group, so leave the search first.
+        searchText = ""
         guard let groupID = selectedGroupID ?? store.groups.first?.id else { return }
-        let s = Snippet(abbreviation: "", content: "")
-        store.updateSnippet(s, inGroup: groupID)
-        selectedSnippetID = s.id
+        selectedGroupID = groupID
+
+        // Sort by recency for a moment so the new (empty) snippet is not sorted
+        // into the middle of the list where the user cannot see it appear.
+        sort = .recentlyModified
+
+        let snippet = Snippet(abbreviation: "", content: "")
+        store.updateSnippet(snippet, inGroup: groupID)
+        selectedSnippetID = snippet.id
+
+        withAnimation(.easeOut(duration: 0.25)) {
+            justAddedID = snippet.id
+        }
+        // Let the highlight fade after it has been noticed.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                if justAddedID == snippet.id { justAddedID = nil }
+            }
+        }
+    }
+
+    private func duplicate(_ hit: SearchHit) {
+        var copy = hit.snippet
+        copy.id = UUID()
+        copy.abbreviation = hit.snippet.abbreviation + "2"
+        copy.label = hit.snippet.label.isEmpty ? "" : hit.snippet.label + " copy"
+        copy.createdAt = Date()
+        copy.modifiedAt = Date()
+        store.updateSnippet(copy, inGroup: hit.groupID)
+        selectedGroupID = hit.groupID
+        selectedSnippetID = copy.id
+        withAnimation { justAddedID = copy.id }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation { if justAddedID == copy.id { justAddedID = nil } }
+        }
+    }
+
+    private func toggleSnippet(_ hit: SearchHit) {
+        var copy = hit.snippet
+        copy.enabled.toggle()
+        store.updateSnippet(copy, inGroup: hit.groupID)
     }
 
     private func deleteSelectedSnippet() {
@@ -218,34 +404,148 @@ struct SnippetsTab: View {
             store.groups[idx].name = field.stringValue
         }
     }
+
+    private func deleteGroup(_ group: SnippetGroup) {
+        guard !group.snippets.isEmpty else {
+            store.removeGroup(id: group.id)
+            if selectedGroupID == group.id { selectedGroupID = store.groups.first?.id }
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete “\(group.name)”?"
+        alert.informativeText = "\(group.snippets.count) snippets will be deleted. This cannot be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            store.removeGroup(id: group.id)
+            if selectedGroupID == group.id { selectedGroupID = store.groups.first?.id }
+        }
+    }
 }
 
-// MARK: - Snippet editor
+// MARK: - Row
+
+private struct SnippetRow: View {
+    let hit: SearchHit
+    let showGroup: Bool
+    let isConflicting: Bool
+    let justAdded: Bool
+
+    private var snippet: Snippet { hit.snippet }
+
+    private var subtitle: String {
+        if !snippet.label.isEmpty { return snippet.label }
+        let preview = snippet.content
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return preview.isEmpty ? "Empty snippet" : preview
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    if snippet.abbreviation.isEmpty {
+                        Text("No abbreviation")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text(snippet.abbreviation)
+                            .font(.system(.body, design: .monospaced))
+                            .bold()
+                    }
+                    if isConflicting {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .help("Another snippet uses this abbreviation — only one of them can expand")
+                    }
+                    if !snippet.enabled {
+                        Image(systemName: "pause.circle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .help("Disabled")
+                    }
+                }
+                HStack(spacing: 4) {
+                    Text(subtitle)
+                        .lineLimit(1)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if showGroup {
+                        Text(hit.groupName)
+                            .font(.caption2)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+        // A freshly added snippet pulses so the user sees where it landed.
+        .listRowBackground(
+            justAdded
+                ? Color.accentColor.opacity(0.22)
+                : Color.clear
+        )
+        .overlay(alignment: .leading) {
+            if justAdded {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: 3)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+// MARK: - Editor
 
 struct SnippetEditor: View {
     @State var snippet: Snippet
+    let conflicts: [SearchHit]
+    let focusAbbreviationOnAppear: Bool
     let onChange: (Snippet) -> Void
+
+    @FocusState private var abbreviationFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Abbreviation").font(.caption).foregroundStyle(.secondary)
                     TextField("e.g. ;sig", text: $snippet.abbreviation)
                         .font(.system(.body, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 180)
+                        .focused($abbreviationFocused)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Label (optional)").font(.caption).foregroundStyle(.secondary)
-                    TextField("Description", text: $snippet.label)
+                    TextField("What this snippet is for", text: $snippet.label)
                         .textFieldStyle(.roundedBorder)
                 }
+            }
+
+            if !conflicts.isEmpty {
+                Label(
+                    conflicts.count == 1
+                        ? "“\(snippet.abbreviation)” is also used in \(conflicts[0].groupName). Only one of them can expand."
+                        : "“\(snippet.abbreviation)” is used by \(conflicts.count) other snippets. Only one of them can expand.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
             }
 
             HStack(spacing: 16) {
                 Toggle("Enabled", isOn: $snippet.enabled)
                 Toggle("Case sensitive", isOn: $snippet.caseSensitive)
+                    .help("When off, ;SIG and ;sig both expand")
                 Spacer()
                 Menu("Insert Macro") {
                     macroButton("Fill-in field", "%filltext:name=field%")
@@ -257,7 +557,7 @@ struct SnippetEditor: View {
                     macroButton("Cursor position", "%|")
                     macroButton("Another snippet", "%snippet:;abbrev%")
                     Divider()
-                    macroButton("Date (2026-07-12)", "%date:yyyy-MM-dd%")
+                    macroButton("Date (2026-07-13)", "%date:yyyy-MM-dd%")
                     macroButton("Time (14:30)", "%date:HH:mm%")
                     macroButton("Press Enter", "%key:enter%")
                 }
@@ -275,9 +575,21 @@ struct SnippetEditor: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 Spacer()
+                Text("\(snippet.content.count) characters")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(14)
+        .onAppear {
+            // A brand-new snippet needs an abbreviation before it can do
+            // anything, so put the cursor there.
+            if focusAbbreviationOnAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    abbreviationFocused = true
+                }
+            }
+        }
         .onChange(of: snippet) { newValue in
             onChange(newValue)
         }

@@ -61,6 +61,12 @@ if let flagIndex = arguments.firstIndex(of: "--import-te") {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-// Menu bar only — no Dock icon.
-app.setActivationPolicy(.accessory)
+
+// SnipKey is a normal app with a Dock icon, even though its day-to-day home is
+// the menu bar. It was a menu-bar-only (.accessory) app at first, and that turned
+// out to be the wrong trade: an accessory app cannot become the active app, so
+// its window opened without keyboard focus — ⌘N and ⌘F went to whatever app was
+// in front, and ⌘C/⌘V did not work inside the snippet editor. A Dock icon is a
+// small price for a window that behaves like every other window on the Mac.
+app.setActivationPolicy(.regular)
 app.run()

@@ -119,16 +119,42 @@ public struct AppSettings: Codable, Hashable {
     /// Seconds to wait before restoring the clipboard after a paste-expansion.
     public var clipboardRestoreDelay: Double
 
+    /// Search-anywhere palette. Defaults to ⌘/ — the same shortcut TextExpander
+    /// uses for its inline search.
+    public var inlineSearchEnabled: Bool
+    public var inlineSearchKeyCode: UInt32
+    public var inlineSearchModifiers: UInt32
+
     public init(
         expansionEnabled: Bool = true,
         playSoundOnExpand: Bool = true,
         didFinishOnboarding: Bool = false,
-        clipboardRestoreDelay: Double = 0.35
+        clipboardRestoreDelay: Double = 0.35,
+        inlineSearchEnabled: Bool = true,
+        inlineSearchKeyCode: UInt32 = 44,   // kVK_ANSI_Slash
+        inlineSearchModifiers: UInt32 = 256 // cmdKey
     ) {
         self.expansionEnabled = expansionEnabled
         self.playSoundOnExpand = playSoundOnExpand
         self.didFinishOnboarding = didFinishOnboarding
         self.clipboardRestoreDelay = clipboardRestoreDelay
+        self.inlineSearchEnabled = inlineSearchEnabled
+        self.inlineSearchKeyCode = inlineSearchKeyCode
+        self.inlineSearchModifiers = inlineSearchModifiers
+    }
+
+    // Older stores predate the inline-search keys; fall back to the defaults
+    // rather than failing to decode the user's whole library.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppSettings()
+        expansionEnabled = try c.decodeIfPresent(Bool.self, forKey: .expansionEnabled) ?? defaults.expansionEnabled
+        playSoundOnExpand = try c.decodeIfPresent(Bool.self, forKey: .playSoundOnExpand) ?? defaults.playSoundOnExpand
+        didFinishOnboarding = try c.decodeIfPresent(Bool.self, forKey: .didFinishOnboarding) ?? defaults.didFinishOnboarding
+        clipboardRestoreDelay = try c.decodeIfPresent(Double.self, forKey: .clipboardRestoreDelay) ?? defaults.clipboardRestoreDelay
+        inlineSearchEnabled = try c.decodeIfPresent(Bool.self, forKey: .inlineSearchEnabled) ?? defaults.inlineSearchEnabled
+        inlineSearchKeyCode = try c.decodeIfPresent(UInt32.self, forKey: .inlineSearchKeyCode) ?? defaults.inlineSearchKeyCode
+        inlineSearchModifiers = try c.decodeIfPresent(UInt32.self, forKey: .inlineSearchModifiers) ?? defaults.inlineSearchModifiers
     }
 }
 

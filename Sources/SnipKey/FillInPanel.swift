@@ -50,9 +50,6 @@ enum FillInPanel {
             guard !finished else { return }
             finished = true
             panel.close()
-            // Drop back to a menu-bar-only app so SnipKey never steals focus
-            // or shows up in the Dock during normal use.
-            NSApp.setActivationPolicy(.accessory)
             completion(values)
         }
 
@@ -64,10 +61,6 @@ enum FillInPanel {
         panel.contentView = NSHostingView(rootView: view)
         panel.center()
 
-        // A menu-bar-only (.accessory) app cannot reliably take keyboard focus.
-        // Become a regular app for as long as the panel is on screen, otherwise
-        // the user's keystrokes go to the app they were typing in.
-        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
