@@ -41,6 +41,14 @@ choice from a list, then assemble the final text.
 
 Requires macOS 13 or later.
 
+Download `SnipKey.dmg` from the [latest release][releases], open it, and drag
+SnipKey to Applications. The disk image is signed and notarized by Apple, so it
+opens without a Gatekeeper warning.
+
+[releases]: https://github.com/dkdannyboy/snipkey/releases
+
+Or build it yourself:
+
 ```bash
 git clone https://github.com/dkdannyboy/snipkey.git
 cd snipkey
@@ -61,11 +69,17 @@ System Settings → Privacy & Security → Accessibility → turn on **SnipKey**
 
 SnipKey has no networking code at all. Nothing you type leaves your Mac.
 
-> **If expansion stops working after you update SnipKey:** macOS ties the grant
-> to the app's code signature. A new build has a new signature, so the switch
-> stays on while macOS quietly ignores it. Open SnipKey's Settings and use
-> **Clear Permission and Re-grant** — or run
-> `tccutil reset Accessibility io.snipkey.mac` and switch it back on.
+> **If expansion stops working after you rebuild SnipKey:** macOS ties the grant
+> to the app's code signature. Released builds and builds signed with a real
+> certificate keep the grant across updates, because macOS identifies them by
+> bundle ID and team ID. But if you build on a Mac with no signing certificate
+> at all, the build is signed ad-hoc and macOS identifies it by code hash alone
+> — so every rebuild looks like a brand new app, and the switch stays on while
+> macOS quietly ignores it. Open SnipKey's Settings and use **Clear Permission
+> and Re-grant**, or run `tccutil reset Accessibility io.snipkey.mac` and switch
+> it back on. To avoid this entirely, sign in to Xcode with any Apple ID — even
+> a free one issues a certificate, and `build-app.sh` will pick it up
+> automatically. See [Development](#development).
 
 ---
 
@@ -175,6 +189,7 @@ swift build          # build
 swift test           # run the unit tests (parser + importer + matcher)
 ./scripts/build-app.sh           # build dist/SnipKey.app
 ./scripts/build-app.sh --install # …and install it to /Applications
+./scripts/release.sh             # signed + notarized dist/SnipKey-<version>.dmg
 ```
 
 The code is split into two targets:
@@ -185,10 +200,63 @@ The code is split into two targets:
   synthetic-keystroke injector, the Carbon hotkey manager, and the SwiftUI
   windows.
 
-During development, every rebuild changes the ad-hoc code signature and macOS
-drops the Accessibility grant. `./scripts/dev-grant-accessibility.sh` clears the
-stale entry, re-approves the app, and verifies the event tap actually came back
-up.
+### Code signing
+
+`build-app.sh` picks the best certificate it can find in your keychain and tells
+you which one it used:
+
+| Certificate in keychain | Signature | Survives rebuild | Distributable |
+| --- | --- | --- | --- |
+| `Developer ID Application` | Hardened runtime + trusted timestamp | Yes | Yes — this is what releases are built with |
+| `Apple Development` | Hardened runtime | Yes | No — runs only on your own Macs |
+| none | Ad-hoc | **No** | No |
+
+The distinction that matters day to day is the middle column. macOS records the
+Accessibility grant against a *designated requirement*. For a properly signed
+app that requirement is "bundle ID `io.snipkey.mac`, team ID `36VF39Z75X`",
+which a rebuild does not change. For an ad-hoc build there is no team ID, so the
+requirement collapses to the raw code hash — and that changes every single
+build, which is why the grant evaporates.
+
+So if you are hacking on SnipKey, sign in to Xcode with an Apple ID (free is
+fine) and let it issue you an `Apple Development` certificate. The grant then
+stops disappearing. If you are stuck without one,
+`./scripts/dev-grant-accessibility.sh` clears the stale TCC entry, re-approves
+the app, and verifies the event tap actually came back up.
+
+Override the choice with `SNIPKEY_SIGN_ID` if you need a specific certificate:
+
+```bash
+SNIPKEY_SIGN_ID="Developer ID Application: Your Name (TEAMID)" ./scripts/build-app.sh
+```
+
+### Cutting a release
+
+`./scripts/release.sh` produces a signed, notarized `dist/SnipKey-<version>.dmg`
+that opens on any Mac with no Gatekeeper warning. It needs two things:
+
+1. A `Developer ID Application` certificate — which requires a paid Apple
+   Developer Program membership. Issue it from Xcode → Settings → Accounts →
+   Manage Certificates → **+** → Developer ID Application. If you already have
+   one on another Mac, export it from Keychain Access *with its private key* as
+   a `.p12` and open that file on this Mac.
+
+2. Notarization credentials, stored once in your keychain:
+
+   ```bash
+   xcrun notarytool store-credentials snipkey-notary \
+     --apple-id "you@example.com" \
+     --team-id "36VF39Z75X" \
+     --password "<app-specific password>"
+   ```
+
+   The password is an app-specific password from appleid.apple.com → Sign-In and
+   Security → App-Specific Passwords. Not your Apple ID password.
+
+The script refuses to run with a clear explanation if either is missing, so it
+will not hand you a half-signed build. It signs the app, sends it to Apple for
+notarization, staples the ticket to the app *and* to the disk image, and
+verifies the result with `spctl` before declaring success.
 
 ---
 

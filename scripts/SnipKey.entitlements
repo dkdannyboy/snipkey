@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 핫키 매크로의 AppleScript 액션을 실행하려면 필요하다.
+	     하드닝 런타임은 이 entitlement 없이는 Apple Event 전송을 차단한다. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+
+	<!-- App Sandbox는 켜지 않는다. 샌드박스 안에서는 전역 키 입력 감시
+	     (CGEventTap)와 임의 셸 스크립트 실행이 모두 불가능하므로
+	     SnipKey의 핵심 기능이 성립하지 않는다. -->
+</dict>
+</plist>
