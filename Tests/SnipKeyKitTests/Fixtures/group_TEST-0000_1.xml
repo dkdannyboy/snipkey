@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>expandAfterMode</key>
+	<integer>0</integer>
+	<key>name</key>
+	<string>Fixture Group</string>
+	<key>snippetPlists</key>
+	<array>
+		<dict>
+			<key>abbreviation</key>
+			<string>~fx1</string>
+			<key>abbreviationMode</key>
+			<integer>0</integer>
+			<key>creationDate</key>
+			<date>2023-09-08T06:49:03Z</date>
+			<key>label</key>
+			<string>Fixture One</string>
+			<key>modificationDate</key>
+			<date>2023-09-08T06:49:15Z</date>
+			<key>plainText</key>
+			<string>fixture expansion one</string>
+			<key>snippetType</key>
+			<integer>0</integer>
+			<key>uuidString</key>
+			<string>AF8FA39B-DA69-4DD9-98BE-4C9CFB37902D</string>
+		</dict>
+		<dict>
+			<key>abbreviation</key>
+			<string>~fx2</string>
+			<key>abbreviationMode</key>
+			<integer>1</integer>
+			<key>creationDate</key>
+			<date>2023-09-08T06:49:22Z</date>
+			<key>label</key>
+			<string></string>
+			<key>modificationDate</key>
+			<date>2023-09-08T14:09:13Z</date>
+			<key>plainText</key>
+			<string>한국어 확장 테스트</string>
+			<key>snippetType</key>
+			<integer>0</integer>
+			<key>uuidString</key>
+			<string>3EB44C9F-E7F5-4003-B92A-36D173BDD846</string>
+		</dict>
+		<dict>
+			<key>abbreviation</key>
+			<string></string>
+			<key>abbreviationMode</key>
+			<integer>0</integer>
+			<key>creationDate</key>
+			<date>2023-09-08T06:49:22Z</date>
+			<key>label</key>
+			<string>No abbreviation</string>
+			<key>modificationDate</key>
+			<date>2023-09-08T14:09:13Z</date>
+			<key>plainText</key>
+			<string>should be skipped</string>
+			<key>snippetType</key>
+			<integer>0</integer>
+			<key>uuidString</key>
+			<string>3EB44C9F-E7F5-4003-B92A-36D173BDD847</string>
+		</dict>
+	</array>
+	<key>uuidString</key>
+	<string>TEST-GROUP-UUID-0000</string>
+	<key>writable</key>
+	<integer>1</integer>
+</dict>
+</plist>
