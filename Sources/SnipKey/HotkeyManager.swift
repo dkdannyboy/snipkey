@@ -115,7 +115,8 @@ enum ActionRunner {
                 text: result.text,
                 cursorOffsetFromEnd: result.cursorOffsetFromEnd,
                 trailingKeys: result.trailingKeys,
-                restoreClipboardAfter: store.settings.clipboardRestoreDelay
+                restoreClipboardAfter: store.settings.clipboardRestoreDelay,
+                expectedPID: NSWorkspace.shared.frontmostApplication?.processIdentifier
             )
 
         case .runShellScript:

@@ -175,8 +175,11 @@ final class ExpansionEngine {
         let tokens = MacroParser.parse(resolved)
         let backspaces = snippet.abbreviation.count
 
+        // The app the abbreviation was typed into. Everything we inject has to
+        // land there, not wherever focus drifts to while we work.
+        let targetApp = NSWorkspace.shared.frontmostApplication
+
         if MacroParser.hasFillIns(tokens) {
-            let previousApp = NSWorkspace.shared.frontmostApplication
             let panel = FillInPanel.present(
                 title: snippet.displayTitle,
                 fields: MacroParser.fillFields(in: tokens)
@@ -184,23 +187,38 @@ final class ExpansionEngine {
                 guard let self else { return }
                 self.activePanel = nil
                 // Return focus to the app the user was typing in.
-                previousApp?.activate()
+                targetApp?.activate()
                 guard let values else {
                     // Cancelled — leave the typed abbreviation in place.
                     return
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    self.inject(tokens: tokens, fillValues: values, backspaces: backspaces)
+                    self.inject(
+                        tokens: tokens,
+                        fillValues: values,
+                        backspaces: backspaces,
+                        targetPID: targetApp?.processIdentifier
+                    )
                 }
             }
             activePanel = panel
             Log.write("fill panel presented (visible=\(panel.isVisible))")
         } else {
-            inject(tokens: tokens, fillValues: [:], backspaces: backspaces)
+            inject(
+                tokens: tokens,
+                fillValues: [:],
+                backspaces: backspaces,
+                targetPID: targetApp?.processIdentifier
+            )
         }
     }
 
-    private func inject(tokens: [MacroToken], fillValues: [Int: String], backspaces: Int) {
+    private func inject(
+        tokens: [MacroToken],
+        fillValues: [Int: String],
+        backspaces: Int,
+        targetPID: pid_t?
+    ) {
         Log.write("inject start (backspaces=\(backspaces))")
         let clipboardText = NSPasteboard.general.string(forType: .string) ?? ""
         let result = MacroParser.render(
@@ -214,7 +232,8 @@ final class ExpansionEngine {
             cursorOffsetFromEnd: result.cursorOffsetFromEnd,
             trailingKeys: result.trailingKeys,
             restoreClipboardAfter: store.settings.clipboardRestoreDelay,
-            playSound: store.settings.playSoundOnExpand
+            playSound: store.settings.playSoundOnExpand,
+            expectedPID: targetPID
         )
         store.recordExpansion()
     }

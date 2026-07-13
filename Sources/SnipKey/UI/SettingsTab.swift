@@ -14,6 +14,14 @@ struct SettingsTab: View {
 
     var body: some View {
         Form {
+            if let failure = store.loadFailure {
+                Section {
+                    LoadFailureView(failure: failure)
+                } header: {
+                    Text("Snippet Library Could Not Be Opened")
+                }
+            }
+
             Section {
                 Toggle("Enable text expansion", isOn: $store.settings.expansionEnabled)
                 Toggle("Play sound when a snippet expands", isOn: $store.settings.playSoundOnExpand)
@@ -147,6 +155,68 @@ struct SettingsTab: View {
             if let raw = try? JSONEncoder.snipKeyPublic.encode(data) {
                 try? raw.write(to: url)
             }
+        }
+    }
+}
+
+/// Shown when store.json exists but could not be read. Saving is blocked until
+/// the user decides what to do, so nothing is overwritten behind their back.
+private struct LoadFailureView: View {
+    @EnvironmentObject var store: Store
+    let failure: Store.LoadFailure
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                "SnipKey found your snippet file but could not read it, so it is showing an empty library.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .foregroundStyle(.orange)
+
+            Text("Nothing has been overwritten — SnipKey will not save until you choose what to do.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(failure.message)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            if let backup = failure.backupURL {
+                Text("A copy was kept at \(backup.lastPathComponent).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button("Show the File") {
+                    NSWorkspace.shared.activateFileViewerSelecting(
+                        [failure.backupURL ?? failure.originalURL]
+                    )
+                }
+                Button("Try Again") {
+                    if !store.retryLoadingStore() {
+                        NSSound.beep()
+                    }
+                }
+                Button("Start Fresh (Discard)", role: .destructive) {
+                    confirmStartFresh()
+                }
+            }
+        }
+    }
+
+    private func confirmStartFresh() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Start with an empty snippet library?"
+        alert.informativeText = failure.backupURL.map {
+            "The unreadable file will be replaced. A copy stays at \($0.path)."
+        } ?? "The unreadable file will be replaced, and no backup copy could be made."
+        alert.addButton(withTitle: "Start Fresh")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            store.startFreshDiscardingUnreadableStore()
         }
     }
 }

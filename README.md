@@ -136,6 +136,12 @@ or run:
 `store.json` is plain JSON — back it up, sync it, or edit it by hand. Settings
 also has an **Export snippets…** button.
 
+If SnipKey ever finds that file but cannot read it — a bad sync, a half-written
+file, a hand edit gone wrong — it does **not** start over on top of it. It keeps
+a timestamped copy next to the original, refuses to save anything, and asks you
+in Settings whether to retry the file or start fresh. Your snippets are never
+overwritten by a failed read.
+
 ---
 
 ## Development

@@ -37,8 +37,24 @@ enum TextInjector {
         }
     }
 
+    /// The app that was frontmost when the abbreviation was typed. Expansion is
+    /// abandoned if focus moved elsewhere in the meantime, so we never backspace
+    /// over and paste into an unrelated app.
+    private static func frontmostPID() -> pid_t? {
+        if Thread.isMainThread {
+            return NSWorkspace.shared.frontmostApplication?.processIdentifier
+        }
+        return DispatchQueue.main.sync {
+            NSWorkspace.shared.frontmostApplication?.processIdentifier
+        }
+    }
+
     /// Full expansion: delete `backspaces` characters, paste `text`, position
     /// the cursor, then press any trailing keys. Runs asynchronously.
+    ///
+    /// `expectedPID` is the app that had focus when the abbreviation matched.
+    /// If focus has since moved, the expansion is dropped rather than typed into
+    /// whatever happens to be frontmost now.
     static func expand(
         backspaces: Int,
         text: String,
@@ -46,6 +62,7 @@ enum TextInjector {
         trailingKeys: [String] = [],
         restoreClipboardAfter: Double = 0.35,
         playSound: Bool = false,
+        expectedPID: pid_t? = nil,
         completion: (() -> Void)? = nil
     ) {
         queue.async {
@@ -54,13 +71,20 @@ enum TextInjector {
             // Give the host app a moment to finish processing the trigger key.
             usleep(40_000)
 
+            if let expectedPID, frontmostPID() != expectedPID {
+                Log.write("expansion cancelled — focus left the original app")
+                return
+            }
+
             for _ in 0..<backspaces {
                 postKey(CGKeyCode(kVK_Delete), source: source)
                 usleep(4_000)
             }
             usleep(30_000)
 
-            insertViaPasteboard(text, source: source, restoreAfter: restoreClipboardAfter)
+            let saved = snapshotClipboard()
+            let pastedAt = Date()
+            pasteText(text, source: source)
 
             if cursorOffsetFromEnd > 0 {
                 usleep(120_000)
@@ -77,6 +101,8 @@ enum TextInjector {
                 }
             }
 
+            restoreClipboard(saved, ifStillHolding: text, pastedAt: pastedAt, minimumDelay: restoreClipboardAfter)
+
             Log.write("inject done (pasted \(text.count) chars)")
             if playSound {
                 DispatchQueue.main.async { NSSound(named: "Pop")?.play() }
@@ -91,18 +117,25 @@ enum TextInjector {
     static func insertText(_ text: String, restoreClipboardAfter: Double = 0.35) {
         queue.async {
             let source = makeSource()
-            insertViaPasteboard(text, source: source, restoreAfter: restoreClipboardAfter)
+            let saved = snapshotClipboard()
+            let pastedAt = Date()
+            pasteText(text, source: source)
+            restoreClipboard(saved, ifStillHolding: text, pastedAt: pastedAt, minimumDelay: restoreClipboardAfter)
         }
     }
 
-    /// Replaces the clipboard, sends Cmd+V, and restores the previous
-    /// clipboard contents afterwards.
-    private static func insertViaPasteboard(_ text: String, source: CGEventSource?, restoreAfter: Double) {
-        let pasteboard = NSPasteboard.general
+    // MARK: - Clipboard
+    //
+    // Snapshot, paste, and restore all run to completion inside one block on the
+    // serial injector queue. That ordering is the whole point: if the restore
+    // were merely *scheduled*, a second expansion arriving before it ran would
+    // snapshot the first snippet as the "original" clipboard, and the user would
+    // be left with a snippet on their clipboard instead of what they had copied.
 
-        // Snapshot current clipboard so it can be restored.
+    private static func snapshotClipboard() -> [[String: Data]] {
+        dispatchPrecondition(condition: .onQueue(queue))
         var saved: [[String: Data]] = []
-        for item in pasteboard.pasteboardItems ?? [] {
+        for item in NSPasteboard.general.pasteboardItems ?? [] {
             var entry: [String: Data] = [:]
             for type in item.types {
                 if let data = item.data(forType: type) {
@@ -111,29 +144,48 @@ enum TextInjector {
             }
             saved.append(entry)
         }
+        return saved
+    }
 
+    private static func pasteText(_ text: String, source: CGEventSource?) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
         usleep(60_000)
         postKey(CGKeyCode(kVK_ANSI_V), flags: .maskCommand, source: source)
+    }
 
-        // Restore after the host app has consumed the paste.
-        queue.asyncAfter(deadline: .now() + max(0.2, restoreAfter)) {
-            let current = NSPasteboard.general
-            guard current.string(forType: .string) == text else { return } // user copied something new
-            current.clearContents()
-            var items: [NSPasteboardItem] = []
-            for entry in saved {
-                let item = NSPasteboardItem()
-                for (type, data) in entry {
-                    item.setData(data, forType: NSPasteboard.PasteboardType(type))
-                }
-                items.append(item)
+    /// Waits until the host app has had time to consume the paste, then puts the
+    /// user's clipboard back — unless they copied something new in the meantime.
+    private static func restoreClipboard(
+        _ saved: [[String: Data]],
+        ifStillHolding text: String,
+        pastedAt: Date,
+        minimumDelay: Double
+    ) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        let elapsed = Date().timeIntervalSince(pastedAt)
+        let remaining = max(0.2, minimumDelay) - elapsed
+        if remaining > 0 {
+            usleep(useconds_t(remaining * 1_000_000))
+        }
+
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.string(forType: .string) == text else { return }
+
+        pasteboard.clearContents()
+        var items: [NSPasteboardItem] = []
+        for entry in saved {
+            let item = NSPasteboardItem()
+            for (type, data) in entry {
+                item.setData(data, forType: NSPasteboard.PasteboardType(type))
             }
-            if !items.isEmpty {
-                current.writeObjects(items)
-            }
+            items.append(item)
+        }
+        if !items.isEmpty {
+            pasteboard.writeObjects(items)
         }
     }
 }
