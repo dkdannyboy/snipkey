@@ -65,7 +65,7 @@ SnipKey has no networking code at all. Nothing you type leaves your Mac.
 > to the app's code signature. A new build has a new signature, so the switch
 > stays on while macOS quietly ignores it. Open SnipKey's Settings and use
 > **Clear Permission and Re-grant** — or run
-> `tccutil reset Accessibility com.snipkey.app` and switch it back on.
+> `tccutil reset Accessibility io.snipkey.mac` and switch it back on.
 
 ---
 
