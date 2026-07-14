@@ -75,15 +75,15 @@ enum TextInjector {
         }
     }
 
-    /// 주입 직전에 '사용자가 계속 타이핑했는지'를 확인하기 위해 기다리는 시간.
+    /// 판정을 내리기 전에 '이미 날아오고 있는 키'가 도착할 시간을 준다.
     ///
-    /// 가드는 이 창이 빠른 타이피스트의 키 간격(대략 100ms)보다 길 때만 의미가 있다.
-    /// 짧으면 사용자의 다음 글자가 '확인한 뒤, 백스페이스가 나가기 전'에 도착해서
-    /// 가드를 그대로 통과한다 — 잡으려던 바로 그 경합이 남는다.
+    /// 가드는 무장 이후에 도착한 키가 있으면 확장을 버리는데, 그 키를 '보기도 전에'
+    /// 판정하면 아무 소용이 없다. 이 창이 빠른 타이피스트의 키 간격(대략 100ms)보다
+    /// 길어야, 종결자 뒤로 계속 치는 사용자의 다음 글자가 판정 전에 관측된다.
     ///
-    /// 대가는 정상 확장이 이만큼 늦어지는 것뿐이다. 종결자를 치고 잠시 멈춘 사용자는
-    /// 100ms 남짓 늦게 확장을 받는다. 그 대신, 계속 타이핑한 사용자는 자기 글자를
-    /// 잃지 않는다. 두 손실의 무게는 비교가 되지 않는다.
+    /// 대가는 정상 확장이 이만큼 늦어지는 것뿐이다. 종결자를 치고 멈춘 사용자는 100ms
+    /// 남짓 늦게 확장을 받는다. 그 대신, 계속 타이핑한 사용자는 자기 글자를 잃지 않는다.
+    /// 두 손실의 무게는 비교가 되지 않는다.
     static let quiescenceSettle: Double = 0.12
 
     /// Full expansion: delete `backspaces` characters, paste `text`, position
@@ -128,10 +128,10 @@ enum TextInjector {
             // 메인 큐를 동기로 기다리는 것도 마찬가지 이유로 이 앞에 둔다.
             if let quiescence {
                 usleep(useconds_t(quiescenceSettle * 1_000_000))
-                if case .abort(let typedAhead) = quiescence() {
+                if case .abort = quiescence() {
                     // 확장을 통째로 버린다. 사용자는 확장을 못 볼 뿐이고, 친 글자는
                     // 그대로 남는다. 약어를 다시 치고 잠깐 멈추면 확장된다.
-                    Log.write("expansion cancelled — user kept typing (\(typedAhead) keys arrived after the match)")
+                    Log.write("expansion cancelled — user kept typing after the match")
                     return
                 }
             }

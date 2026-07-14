@@ -438,13 +438,23 @@ cat > "$TMP_DIR/store.json" <<'EOF'
           "enabled": true,
           "createdAt": "2026-01-01T00:00:00Z",
           "modifiedAt": "2026-01-01T00:00:00Z"
+        },
+        {
+          "id": "E2E5A000-0000-4000-8000-000000000004",
+          "abbreviation": ";fill",
+          "content": "FILLED-[%filltext:name=v%]",
+          "label": "fill-in snippet",
+          "caseSensitive": true,
+          "enabled": true,
+          "createdAt": "2026-01-01T00:00:00Z",
+          "modifiedAt": "2026-01-01T00:00:00Z"
         }
       ]
     }
   ]
 }
 EOF
-echo "  스니펫 3개 시딩: ';e2e' → expanded-ok, ';cb' → clip=[%clipboard], 'sig' → SIGNATURE-BLOCK"
+echo "  스니펫 4개 시딩: ';e2e' → expanded-ok, ';cb' → clip=[%clipboard], 'sig' → SIGNATURE-BLOCK, ';fill' → FILLED-[…]"
 
 # ── 3. 격리된 저장소로 SnipKey 실행 ─────────────────────────────────────────
 echo "▸ Launching SnipKey against the temp store…"
@@ -835,6 +845,130 @@ run_case_tab_terminator() {
     "(g) Tab does NOT terminate a bare-word abbreviation" 48
 }
 
+# ── (i) 필인 패널을 닫자마자 대상 앱에 타이핑하면 확장을 버린다 ────────────
+# Codex가 찾아낸 파괴 경로. (h)가 '종결자 뒤로 계속 치는 경우'를 막았지만, 필인 경로는
+# 지우기가 패널이 닫힌 '뒤'에 나가기 때문에 창이 하나 더 있다:
+#
+#   패널 닫힘 → 대상 앱으로 포커스 반환 → (0.25초 + 인젝터 정착) → 백스페이스
+#
+# 그 사이에 사용자가 대상 앱에 타이핑하면, 뒤늦게 나가는 백스페이스가 약어가 아니라
+# 방금 친 글자를 먹는다. 카운터 모델은 포커스를 돌려준 '뒤'에 기준값을 다시 떠서 이
+# 글자들을 '타이핑한 적 없는 것'으로 흡수해 버렸다 — 그래서 못 잡았다.
+#
+# 이제 가드는 '패널이 닫히는 순간'에 무장하고, 그 뒤에 도착한 키가 하나라도 있으면
+# 확장을 버린다. 사용자가 치고 나서 '멈춰도' 잡힌다 — 정숙 여부가 아니라 '무장 이후에
+# 왔는가'로 묻기 때문이다.
+#
+# 타이밍이 이 케이스의 전부다:
+#   - Return 뒤 0.1초에 치기 시작한다. 그보다 빠르면 포커스가 아직 패널에서 TextEdit으로
+#     넘어오는 중이라 키가 유실된다(실측: 첫 글자가 통째로 사라졌다). 그러면 '먹혔는지'를
+#     문서로 판별할 수 없게 된다.
+#   - 세 글자를 40ms 간격으로 몰아친다. 마지막 키가 Return + 0.18초쯤에 떨어져서, 파괴
+#     구간(닫힘 → +0.25초 예약 → +0.16초 정착 → 백스페이스) 안에 완전히 들어간다.
+#     예전 카운터 모델이 기준값에 흡수해 버리던 바로 그 구간이다.
+#   - 그래서 이 케이스는 카운터 모델 바이너리에서 반드시 실패한다(비-공허성 확인 완료).
+run_case_fill_in_typing_after_panel_aborts() {
+  local name="(i) typing right after the fill-in panel closes aborts the expansion"
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  local mark=$(log_lines)
+
+  # 구두점 시작 약어라 종결자를 기다리지 않고 즉시 발화한다 → 필인 패널이 뜬다.
+  type_text ";fill"
+
+  # 패널이 실제로 떠야 이 케이스가 성립한다. 안 뜨면 측정할 것이 없다.
+  if ! wait_for 8 'grep -q "fill panel presented" "$LOG"'; then
+    fail "$name" "필인 패널이 뜨지 않았다 — 이 경로를 측정할 수 없다. 로그: $(log_since "$mark" | tr '\n' ' ')"
+    return
+  fi
+
+  # 필드에 값을 채우고 Return으로 닫은 '직후' 곧바로 대상 앱에 타이핑한다.
+  # Return과 'keepme' 사이에 어떤 지연도 두지 않는 것이 이 케이스의 전부다.
+  # `|| true` 필수 — 실패는 어설션이 잡아야지 set -e가 하네스를 죽여서는 안 된다.
+  osascript >/dev/null 2>&1 <<'EOF' || true
+with timeout of 60 seconds
+  tell application "System Events"
+    repeat with c in characters of "VAL"
+      keystroke (c as text)
+      delay 0.05
+    end repeat
+    key code 36
+    delay 0.1
+    repeat with c in characters of "abc"
+      keystroke (c as text)
+      delay 0.04
+    end repeat
+  end tell
+end timeout
+EOF
+
+  # 확장(또는 취소)이 결론까지 가도록 기다린다.
+  sleep 3
+
+  # 문서를 '지금' 읽는다 — positive control(' ;e2e')을 치기 전에.
+  # 스페이스로 단어가 끝나는 순간 TextEdit이 자동 수정/대문자화로 텍스트를 다시 쓴다
+  # ('filleepme' → 'filled-me' 로 바뀌는 것을 실제로 봤다). 아직 단어가 끝나지 않은
+  # 이 시점의 텍스트가 사용자가 실제로 친 것에 가장 가깝다.
+  local typed_state
+  typed_state=$(textedit_text) || typed_state="<읽기 실패>"
+
+  # positive control. 키 입력 경로가 살아 있음을 증명한다.
+  type_text " ;e2e"
+  sleep 3
+
+  local logged
+  logged=$(log_since "$mark")
+
+  local matched=0
+  echo "$logged" | grep -q "matched ';fill'" && matched=1
+
+  local aborted=0
+  echo "$logged" | grep -q "expansion cancelled — user kept typing" && aborted=1
+
+  # 'inject done'을 센다. 'inject start'는 엔진이 주입을 '결정'한 시점에 찍히고,
+  # 가드는 그 뒤 인젝터 큐에서 판정하므로 실제로 키가 나갔는지를 말해주지 않는다.
+  local done_count
+  done_count=$(echo "$logged" | grep -c "inject done" || true)
+
+  if [[ "$matched" -eq 0 ]]; then
+    fail "$name" "';fill' 이 매치되지 않았다 — 측정을 신뢰할 수 없다. 로그: $(echo "$logged" | tr '\n' ' ')"
+    return
+  fi
+  if [[ "$aborted" -eq 0 ]]; then
+    fail "$name" "패널을 닫자마자 타이핑했는데 확장이 취소되지 않았다 — 필인 파괴 경로 재발. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled|panel" | tr '\n' ' ')"
+    return
+  fi
+  if [[ "$done_count" -ne 1 ]]; then
+    fail "$name" "'inject done' ${done_count}회 (기대: positive control ;e2e 1회뿐). 필인이 주입됐다면 백스페이스가 나갔다는 뜻이다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+    return
+  fi
+
+  # 문서 확인. 로그가 이미 '백스페이스가 한 번도 나가지 않았다'를 증명하지만, 이 케이스의
+  # 요점(사용자가 친 글자가 먹히지 않았다)을 눈으로 못 박는다.
+  #
+  # 기대: ";fillabc" — 약어 ';fill' 이 그대로 남고, 패널을 닫은 뒤 친 'abc'도 온전하고,
+  # 확장 결과(FILLED-)는 없다.
+  #
+  # 가드가 없으면 백스페이스 5개가 문서 끝에서부터 먹는다: ';fillabc' → ';fi' 가 되고
+  # 그 뒤에 'FILLED-[VAL]'이 붙는다. 즉 'abc'도 ';fill'도 함께 파괴된다. 아래 세 검사는
+  # 그 파괴를 정확히 잡는다.
+  if [[ "$typed_state" == *"FILLED-"* ]]; then
+    fail "$name" "문서=[$typed_state] — 취소했다면서 필인 확장이 들어갔다."
+    return
+  fi
+  if [[ "$typed_state" != *"abc"* ]]; then
+    fail "$name" "문서=[$typed_state] — 패널을 닫고 친 'abc'가 온전하지 않다. 백스페이스가 먹었다."
+    return
+  fi
+  if [[ "$typed_state" != *";fill"* ]]; then
+    fail "$name" "문서=[$typed_state] — 약어 ';fill' 이 지워졌다. 백스페이스가 나갔다는 뜻이다."
+    return
+  fi
+
+  pass "$name  문서=[$typed_state]"
+}
+
 run_case_plain_expansion
 run_case_substring_no_expansion
 run_case_word_prefix_no_expansion
@@ -842,6 +976,7 @@ run_case_terminated_bare_word_expands
 run_case_return_terminator
 run_case_tab_terminator
 run_case_typing_ahead_aborts_expansion
+run_case_fill_in_typing_after_panel_aborts
 run_case_clipboard_preserved
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────
