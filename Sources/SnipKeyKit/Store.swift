@@ -53,16 +53,41 @@ public final class Store: ObservableObject {
         /// lowercased abbreviation -> snippet, for case-insensitive snippets
         public let insensitive: [String: Snippet]
 
-        /// Finds the longest enabled abbreviation that is a suffix of `buffer`.
+        /// 유니코드 기준 단어 문자. ASCII만 보면 한글·일본어·악센트 라틴이
+        /// 전부 "경계"로 잘못 분류돼서, 단어 한가운데서 확장이 터진다.
+        static func isWordCharacter(_ c: Character) -> Bool {
+            c.isLetter || c.isNumber || c == "_"
+        }
+
+        /// Finds the longest enabled abbreviation that is a suffix of `buffer`,
+        /// requiring a word boundary before word-initial abbreviations.
         public func match(buffer: String) -> Snippet? {
             guard maxLength > 0, !buffer.isEmpty else { return nil }
             let chars = Array(buffer)
             let upper = min(maxLength, chars.count)
             // Longest match wins, mirroring TextExpander behavior.
             for len in stride(from: upper, through: 1, by: -1) {
-                let suffix = String(chars[(chars.count - len)...])
-                if let s = exact[suffix] { return s }
-                if let s = insensitive[suffix.lowercased()] { return s }
+                let start = chars.count - len
+                let suffix = String(chars[start...])
+                guard let snippet = exact[suffix] ?? insensitive[suffix.lowercased()] else {
+                    continue
+                }
+
+                // 단어 경계 검사. 약어가 단어 문자로 시작하는데 바로 앞 글자도
+                // 단어 문자라면, 사용자는 약어가 아니라 더 긴 단어를 치는 중이다
+                // ('sig' 스니펫을 둔 채 'design'을 치는 경우). 여기서 발화하면
+                // 아직 도착하지 않은 키와 백스페이스가 경합해 사용자가 친 글자를
+                // 비결정적으로 파괴한다.
+                //
+                // ';sig', '/addr' 처럼 구두점으로 시작하는 약어는 그 자체로 경계라
+                // 검사에서 제외한다 — 글자 바로 뒤에 와도 지금처럼 확장된다.
+                if Self.isWordCharacter(chars[start]),
+                   start > 0,
+                   Self.isWordCharacter(chars[start - 1]) {
+                    // 더 짧은 접미사가 여전히 정당한 매치일 수 있으므로 스캔을 계속한다.
+                    continue
+                }
+                return snippet
             }
             return nil
         }
@@ -76,7 +101,19 @@ public final class Store: ObservableObject {
         return _matcher
     }
 
-    public static func defaultFileURL() -> URL {
+    /// 저장소 파일 경로를 강제로 바꾸는 환경변수. E2E 하네스가 사용자의 실제
+    /// 스니펫 라이브러리 대신 일회용 저장소를 쓰게 하는 유일한 통로다.
+    public static let storeDirEnvKey = "SNIPKEY_STORE_DIR"
+
+    public static func defaultFileURL(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> URL {
+        // 테스트 격리용 오버라이드. 값이 비어 있으면 설정하지 않은 것으로 본다 —
+        // 빈 문자열을 그대로 받아들이면 "/store.json"을 가리키게 된다.
+        if let dir = environment[storeDirEnvKey], !dir.isEmpty {
+            return URL(fileURLWithPath: dir, isDirectory: true)
+                .appendingPathComponent("store.json")
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("SnipKey/store.json")
     }

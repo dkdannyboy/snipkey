@@ -48,9 +48,18 @@ final class TEImporterTests: XCTestCase {
             Snippet(abbreviation: "ddd", content: "long"),
             Snippet(abbreviation: "dd", content: "short"),
         ])]
-        XCTAssertEqual(store.matcher.match(buffer: "xxddd")?.content, "long")
-        XCTAssertEqual(store.matcher.match(buffer: "xxadd")?.content, "short")
+        // 이 테스트가 검증하려는 것은 "가장 긴 접미사가 이긴다"이고,
+        // 앞의 'xx'는 원래 의미 없는 패딩이었다. 하지만 패딩이 하필 단어 문자라
+        // 단어 경계 규칙 도입 후에는 확장이 정당하게 거부된다. 의도를 유지하려면
+        // 약어 앞에 경계를 둬야 한다. (이전 버전은 'xxadd' -> "short"를 기대했는데,
+        // 그건 곧 'add'라는 단어 안의 'dd'가 터지는 버그 동작이었다.)
+        XCTAssertEqual(store.matcher.match(buffer: "xx ddd")?.content, "long")
+        XCTAssertEqual(store.matcher.match(buffer: "xx dd")?.content, "short")
         XCTAssertNil(store.matcher.match(buffer: "xxx"))
+
+        // 단어 한가운데의 약어는 확장되지 않는다 — 위 회귀의 본체.
+        XCTAssertNil(store.matcher.match(buffer: "xxadd"))
+        XCTAssertNil(store.matcher.match(buffer: "xxddd"))
         try? FileManager.default.removeItem(at: tmp)
     }
 
