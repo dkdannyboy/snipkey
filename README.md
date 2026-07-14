@@ -19,6 +19,18 @@ price for a window that behaves like every other window on the Mac.
 **Text expansion.** Type an abbreviation in any app and SnipKey replaces it with
 the full text. `;sig` becomes your signature; `;addr` becomes your address.
 
+An abbreviation that starts with punctuation — `;sig`, `/addr`, `,date` — expands
+the moment you finish typing it. The punctuation makes it unambiguous: no real
+word starts that way.
+
+A bare-word abbreviation like `sig` waits for you to type a terminator (a space,
+a period, any non-word character) before it expands. It has to. `sig` is the
+first three letters of `signal`, `sign`, and `signature`, so expanding the instant
+you type it would make those words impossible to write — SnipKey would eat them
+mid-keystroke. Type `sig ` and you get your signature followed by the space, right
+where you put it. Punctuation-prefixed abbreviations are the ones to reach for
+when you want expansion the moment you stop typing.
+
 **Search anywhere (⌘/).** Cannot remember an abbreviation? Press ⌘/ while typing
 in any app, search your whole library by abbreviation, label, or content, and
 press Return to expand the one you want. This is what makes a library of

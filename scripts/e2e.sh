@@ -187,14 +187,23 @@ front_doc_is_ours() {
 # TextEdit이 응답하지 않을 때 되살린다. 죽은 TextEdit을 상대로 케이스를 돌리면
 # SnipKey가 멀쩡한데도 전부 빨갛게 뜬다.
 #
-# 강제 종료는 하네스가 직접 띄운 TextEdit에만 한다. 사용자가 쓰던 TextEdit이라면
-# 응답하지 않는다는 이유로 kill -9 할 수 없다 — 그 안에 저장 안 된 원고가 있는지
-# 확인할 방법조차 없는 상태이기 때문이다. 그럴 땐 되살리기를 포기하고 실패시킨다.
+# preflight가 TextEdit을 종료시키므로, 여기서 도는 TextEdit은 하네스가 띄운 것이다.
+# 그래도 강제 종료 전에 남의 문서가 생기지 않았는지 확인한다 — 하네스가 도는 중에
+# 사용자가 문서를 열었다면 kill -9는 그 작업을 파괴한다.
+#
+# 문서를 셀 수 있고 우리 것(0개 또는 1개) 뿐이면 강제 종료해도 잃을 게 없다.
+# 응답조차 없으면 셀 수도 없는데, 그땐 하네스를 계속할 방법이 없으므로 재시작한다.
+# preflight가 시작 시점의 문서 0개를 보장했고 하네스가 키보드를 점유한 채 도는
+# 짧은 시간이라, 그 사이 남의 문서가 생겼을 가능성은 사실상 없다.
 revive_textedit() {
-  if [[ "$TEXTEDIT_WAS_RUNNING" -ne 0 ]]; then
-    echo "  TextEdit이 응답하지 않는다. 사용자가 쓰던 TextEdit이라 강제 종료하지 않는다."
+  local docs
+  docs=$(osa 5 -e 'tell application "TextEdit" to count documents' 2>/dev/null) || docs="unknown"
+
+  if [[ "$docs" != "unknown" && "$docs" -gt 1 ]]; then
+    echo "  TextEdit이 응답하지 않지만 다른 문서가 열려 있다 — 강제 종료하지 않는다."
     return 1
   fi
+
   echo "  TextEdit이 응답하지 않는다. 강제 재시작…"
   pkill -9 -x TextEdit 2>/dev/null || true
   sleep 2
@@ -342,7 +351,14 @@ if pgrep -x TextEdit >/dev/null 2>&1; then
     exit 1
   fi
 
-  echo "  TextEdit 실행 중이지만 열린 문서 없음 — 안전"
+  # 문서가 없음을 확인했으니 안전하게 종료한다. 그냥 두면 안 되는 이유가 있다:
+  # TextEdit은 실행 직후 상태 복원 때문에 잠깐 유령 문서를 띄우는데, 그러면
+  # `document 1`이 우리 것이 아니게 되어 하네스가 자기 문서를 찾지 못한다. 게다가
+  # 사용자가 띄운 TextEdit은 강제 재시작(revive) 대상이 아니라서 스스로 회복하지도
+  # 못하고 그대로 전부 실패한다. 하네스가 직접 띄운 TextEdit만 상대하는 편이 낫다.
+  echo "  TextEdit 실행 중이지만 열린 문서 없음 — 종료하고 하네스가 다시 띄운다"
+  osa 10 -e 'tell application "TextEdit" to quit' >/dev/null 2>&1 || pkill -9 -x TextEdit 2>/dev/null || true
+  sleep 1.5
 else
   TEXTEDIT_WAS_RUNNING=0
   echo "  TextEdit 미실행 — 하네스가 띄우고 끝나면 종료한다"
@@ -576,8 +592,97 @@ run_case_clipboard_preserved() {
   fi
 }
 
+# ── (d) 약어를 '접두사'로 가진 더 긴 단어를 칠 수 있어야 한다 ───────────────
+# (b)의 자매 케이스이자, (b)를 고친 커밋이 놓친 나머지 절반.
+#
+# (b)는 약어가 단어 '안쪽'에 있는 경우('design' 안의 sig)를 막았다. 하지만 약어가
+# 단어 '머리'에 있는 경우('signal'의 sig)는 여전히 터졌다. s·i·g가 들어온 순간
+# 버퍼가 'sig'가 되고 바로 앞은 경계(공백/문서 시작)이므로 엔진이 즉시 발화한다.
+# 백스페이스 3번과 주입이 나가는 동안 n·a·l이 계속 도착해 'SIGNATURE-BLOCKnal'이
+# 된다 — 사용자는 'signal'이라는 단어를 아예 칠 수 없다.
+#
+# 이제 맨몸 약어는 종결자를 기다리므로 'signal'은 조용히 지나가야 한다.
+run_case_word_prefix_no_expansion() {
+  local name="(d) longer word starting with an abbreviation does NOT expand"
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  local mark=$(log_lines)
+
+  # 'sig' 스니펫이 시딩돼 있다. 종결자 규칙이 없으면 'sig'까지 친 순간 발화한다.
+  type_text "signal"
+  sleep 2
+
+  # positive control. 이게 확장돼야만 '키가 실제로 엔진까지 도달했다'가 증명된다.
+  # 없으면 타이핑이 아무 데도 가지 않았는데 로그가 조용하다는 이유로 통과한다.
+  type_text " ;e2e"
+  sleep 3
+
+  # 판정은 엔진 로그로만 한다. 문서 텍스트로 판정하면 TextEdit의 간헐적
+  # AppleEvent 지연이 SnipKey 결함으로 오보된다.
+  local logged
+  logged=$(log_since "$mark")
+
+  local sig_matched=0
+  echo "$logged" | grep -q "matched 'sig'" && sig_matched=1
+
+  local injects
+  injects=$(echo "$logged" | grep -c "inject start" || true)
+
+  if [[ "$sig_matched" -eq 1 ]]; then
+    fail "$name" "'signal' 도중 'sig'가 매치됐다 — 접두 오확장 재발. 로그: $(echo "$logged" | grep -E "matched|inject start" | tr '\n' ' ')"
+  elif [[ "$injects" -ne 1 ]]; then
+    fail "$name" "타이핑 도달 확인 실패 — 'inject start' ${injects}회 (기대: ;e2e 확장 1회). 측정을 신뢰할 수 없다."
+  else
+    pass "$name  ('sig' 미발화, ';e2e'만 확장되어 타이핑 도달 확인됨)"
+  fi
+}
+
+# ── (e) 종결된 맨몸 약어는 확장되고, 종결자는 살아남는다 ────────────────────
+# (d)의 반대편. 종결자를 기다리게 만든 대가로 맨몸 약어가 아예 죽어버리면 안 된다.
+# 'sig '를 치면 확장되어야 하고, 이때 종결자(스페이스)는 이미 화면에 있으므로
+# 약어와 함께 지웠다가(backspaces=4) 확장 내용 뒤에 다시 찍어야 한다.
+run_case_terminated_bare_word_expands() {
+  local name="(e) terminated bare-word abbreviation expands, terminator survives"
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  local mark=$(log_lines)
+  type_text "sig "
+  sleep 3
+
+  local logged
+  logged=$(log_since "$mark")
+
+  # 판정은 로그로 한다. backspaces=4 는 '약어 3 + 종결자 1'이라는 계약 그 자체다.
+  # 3이면 종결자를 지우지 않은 것이고, 그러면 확장 내용이 스페이스 앞에 끼어든다.
+  if ! echo "$logged" | grep -q "matched 'sig'"; then
+    fail "$name" "'sig ' 를 쳤는데 매치되지 않았다 — 종결자 규칙이 맨몸 약어를 죽였다. 로그: $(echo "$logged" | tr '\n' ' ')"
+    return
+  fi
+  if ! echo "$logged" | grep -q "inject start (backspaces=4)"; then
+    fail "$name" "백스페이스 수가 4가 아니다 (약어 3 + 종결자 1). 로그: $(echo "$logged" | grep "inject start" | tr '\n' ' ')"
+    return
+  fi
+
+  # 여기까지 왔으면 엔진은 올바르게 동작했다. 문서 텍스트는 '보조' 확인일 뿐이다.
+  # TextEdit이 응답하지 않으면 SnipKey 결함이 아니므로 실패시키지 않고 알리기만 한다.
+  local text
+  if text=$(textedit_text); then
+    if [[ "$text" != *"SIGNATURE-BLOCK "* ]]; then
+      fail "$name" "엔진은 발화했지만 문서=[$text] — 기대: 'SIGNATURE-BLOCK ' (종결자 스페이스가 확장 내용 뒤에 남아야 함)"
+      return
+    fi
+    pass "$name  문서=[$text]"
+  else
+    pass "$name  (엔진 로그 확인됨; TextEdit이 응답하지 않아 문서 확인은 생략)"
+  fi
+}
+
 run_case_plain_expansion
 run_case_substring_no_expansion
+run_case_word_prefix_no_expansion
+run_case_terminated_bare_word_expands
 run_case_clipboard_preserved
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────

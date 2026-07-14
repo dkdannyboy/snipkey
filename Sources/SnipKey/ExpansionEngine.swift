@@ -157,11 +157,11 @@ final class ExpansionEngine {
             buffer = String(buffer.suffix(maxBuffer))
         }
 
-        if let snippet = store.matcher.match(buffer: buffer) {
-            Log.write("matched '\(snippet.abbreviation)'")
+        if let match = store.matcher.match(buffer: buffer) {
+            Log.write("matched '\(match.snippet.abbreviation)'")
             buffer = ""
             DispatchQueue.main.async { [weak self] in
-                self?.expand(snippet)
+                self?.expand(match)
             }
         }
     }
@@ -173,22 +173,31 @@ final class ExpansionEngine {
     /// in the app they were working in.
     func expandFromSearch(_ snippet: Snippet, into app: NSRunningApplication?) {
         // Let focus finish returning to the original app before typing into it.
+        // 아무것도 타이핑되지 않았으므로 지울 것도, 되돌려 찍을 종결자도 없다.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.expand(snippet, backspaces: 0, targetApp: app)
+            self?.expand(snippet, backspaces: 0, terminator: "", targetApp: app)
         }
     }
 
-    private func expand(_ snippet: Snippet) {
+    /// 매처가 정한 대로 지우고 확장한다. 몇 글자를 지울지는 약어 길이가 아니라
+    /// 매치가 알려준다 — 맨몸 약어는 종결자까지 함께 지웠다가 뒤에 다시 찍는다.
+    private func expand(_ match: Store.Matcher.Match) {
         // The app the abbreviation was typed into. Everything we inject has to
         // land there, not wherever focus drifts to while we work.
         expand(
-            snippet,
-            backspaces: snippet.abbreviation.count,
+            match.snippet,
+            backspaces: match.backspaces,
+            terminator: match.terminator,
             targetApp: NSWorkspace.shared.frontmostApplication
         )
     }
 
-    private func expand(_ snippet: Snippet, backspaces: Int, targetApp: NSRunningApplication?) {
+    private func expand(
+        _ snippet: Snippet,
+        backspaces: Int,
+        terminator: String,
+        targetApp: NSRunningApplication?
+    ) {
         let resolved = MacroParser.resolveNested(snippet.content) { [weak self] abbrev in
             self?.store.snippet(forAbbreviation: abbrev)?.content
         }
@@ -212,6 +221,7 @@ final class ExpansionEngine {
                         tokens: tokens,
                         fillValues: values,
                         backspaces: backspaces,
+                        terminator: terminator,
                         targetPID: targetApp?.processIdentifier
                     )
                 }
@@ -223,6 +233,7 @@ final class ExpansionEngine {
                 tokens: tokens,
                 fillValues: [:],
                 backspaces: backspaces,
+                terminator: terminator,
                 targetPID: targetApp?.processIdentifier
             )
         }
@@ -232,6 +243,7 @@ final class ExpansionEngine {
         tokens: [MacroToken],
         fillValues: [Int: String],
         backspaces: Int,
+        terminator: String,
         targetPID: pid_t?
     ) {
         Log.write("inject start (backspaces=\(backspaces))")
@@ -241,10 +253,23 @@ final class ExpansionEngine {
             fillValues: fillValues,
             clipboard: clipboardText
         )
+
+        // 종결자는 이미 사용자가 쳤고 백스페이스로 함께 지워졌다. 매크로·필인이
+        // 모두 전개된 '뒤'에 다시 붙여야 사용자가 친 그 자리에 그대로 남는다.
+        // 커서 매크로(%|%)가 있으면 그 위치가 밀리지 않도록 오프셋도 함께 민다.
+        var text = result.text
+        var cursorOffsetFromEnd = result.cursorOffsetFromEnd
+        if !terminator.isEmpty {
+            text += terminator
+            if cursorOffsetFromEnd > 0 {
+                cursorOffsetFromEnd += terminator.count
+            }
+        }
+
         TextInjector.expand(
             backspaces: backspaces,
-            text: result.text,
-            cursorOffsetFromEnd: result.cursorOffsetFromEnd,
+            text: text,
+            cursorOffsetFromEnd: cursorOffsetFromEnd,
             trailingKeys: result.trailingKeys,
             restoreClipboardAfter: store.settings.clipboardRestoreDelay,
             playSound: store.settings.playSoundOnExpand,

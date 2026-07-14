@@ -53,13 +53,31 @@ final class TEImporterTests: XCTestCase {
         // 단어 경계 규칙 도입 후에는 확장이 정당하게 거부된다. 의도를 유지하려면
         // 약어 앞에 경계를 둬야 한다. (이전 버전은 'xxadd' -> "short"를 기대했는데,
         // 그건 곧 'add'라는 단어 안의 'dd'가 터지는 버그 동작이었다.)
-        XCTAssertEqual(store.matcher.match(buffer: "xx ddd")?.content, "long")
-        XCTAssertEqual(store.matcher.match(buffer: "xx dd")?.content, "short")
+        //
+        // 'ddd'/'dd'는 맨몸 약어(단어 문자로 시작)라 종결자가 있어야 발화한다.
+        // 종결자가 없으면 사용자가 'dddd…'라는 더 긴 단어를 치는 중일 수 있다.
+        // 그래서 버퍼 끝에 스페이스를 붙였다. 검증 의도(최장 우선)는 그대로다.
+        let longMatch = store.matcher.match(buffer: "xx ddd ")
+        XCTAssertEqual(longMatch?.snippet.content, "long")
+        XCTAssertEqual(longMatch?.backspaces, 4)   // 'ddd' + 종결자
+        XCTAssertEqual(longMatch?.terminator, " ")
+
+        let shortMatch = store.matcher.match(buffer: "xx dd ")
+        XCTAssertEqual(shortMatch?.snippet.content, "short")
+        XCTAssertEqual(shortMatch?.backspaces, 3)  // 'dd' + 종결자
+        XCTAssertEqual(shortMatch?.terminator, " ")
+
         XCTAssertNil(store.matcher.match(buffer: "xxx"))
+
+        // 종결자가 없으면 발화하지 않는다 — 접두 모호성 규칙.
+        XCTAssertNil(store.matcher.match(buffer: "xx ddd"))
+        XCTAssertNil(store.matcher.match(buffer: "xx dd"))
 
         // 단어 한가운데의 약어는 확장되지 않는다 — 위 회귀의 본체.
         XCTAssertNil(store.matcher.match(buffer: "xxadd"))
         XCTAssertNil(store.matcher.match(buffer: "xxddd"))
+        XCTAssertNil(store.matcher.match(buffer: "xxadd "))
+        XCTAssertNil(store.matcher.match(buffer: "xxddd "))
         try? FileManager.default.removeItem(at: tmp)
     }
 
@@ -70,8 +88,8 @@ final class TEImporterTests: XCTestCase {
         store.groups = [SnippetGroup(name: "G", snippets: [
             Snippet(abbreviation: ";Sig", content: "signature", caseSensitive: false),
         ])]
-        XCTAssertEqual(store.matcher.match(buffer: "a;sig")?.content, "signature")
-        XCTAssertEqual(store.matcher.match(buffer: "a;SIG")?.content, "signature")
+        XCTAssertEqual(store.matcher.match(buffer: "a;sig")?.snippet.content, "signature")
+        XCTAssertEqual(store.matcher.match(buffer: "a;SIG")?.snippet.content, "signature")
         try? FileManager.default.removeItem(at: tmp)
     }
 
@@ -162,7 +180,7 @@ final class TEImporterTests: XCTestCase {
         XCTAssertTrue(store.retryLoadingStore())
         XCTAssertNil(store.loadFailure)
         XCTAssertEqual(store.groups.map(\.name), ["Rescued"])
-        XCTAssertEqual(store.matcher.match(buffer: "a;r")?.content, "rescued")
+        XCTAssertEqual(store.matcher.match(buffer: "a;r")?.snippet.content, "rescued")
 
         try? FileManager.default.removeItem(at: tmp)
     }

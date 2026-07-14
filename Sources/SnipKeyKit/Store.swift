@@ -53,41 +53,85 @@ public final class Store: ObservableObject {
         /// lowercased abbreviation -> snippet, for case-insensitive snippets
         public let insensitive: [String: Snippet]
 
+        /// 발화가 확정된 매치. 무엇을 몇 글자 지우고, 무엇을 다시 찍어야 하는지까지
+        /// 담는다. 종결자가 필요한 약어는 종결자가 이미 타이핑된 뒤에야 발화하므로,
+        /// 호출자가 약어 길이만 보고 백스페이스 수를 정하면 종결자가 남아 버린다.
+        public struct Match {
+            public let snippet: Snippet
+            /// 지워야 할 글자 수. 약어 길이, 또는 약어 길이 + 종결자 길이.
+            public let backspaces: Int
+            /// 확장된 내용 뒤에 다시 찍어야 할 종결자. 구두점 시작 약어는 "".
+            public let terminator: String
+
+            public init(snippet: Snippet, backspaces: Int, terminator: String) {
+                self.snippet = snippet
+                self.backspaces = backspaces
+                self.terminator = terminator
+            }
+        }
+
         /// 유니코드 기준 단어 문자. ASCII만 보면 한글·일본어·악센트 라틴이
         /// 전부 "경계"로 잘못 분류돼서, 단어 한가운데서 확장이 터진다.
         static func isWordCharacter(_ c: Character) -> Bool {
             c.isLetter || c.isNumber || c == "_"
         }
 
-        /// Finds the longest enabled abbreviation that is a suffix of `buffer`,
-        /// requiring a word boundary before word-initial abbreviations.
-        public func match(buffer: String) -> Snippet? {
+        private func lookup(_ chars: [Character], _ range: Range<Int>) -> Snippet? {
+            let key = String(chars[range])
+            return exact[key] ?? insensitive[key.lowercased()]
+        }
+
+        /// 버퍼 끝에서 발화 조건을 만족하는 가장 긴 약어를 찾는다.
+        ///
+        /// 약어는 두 부류이고, 발화 조건이 서로 다르다.
+        ///
+        /// 1) 구두점으로 시작하는 약어(';sig', '/addr'): 접두 구두점이 스스로 경계라
+        ///    접두 모호성이 없다. 버퍼가 약어로 끝나는 즉시 발화한다. 앞 글자가
+        ///    무엇이든 상관없다 — 'a;sig'도 지금처럼 확장된다.
+        ///
+        /// 2) 단어 문자로 시작하는 맨몸 약어('sig', 'addr'): 이건 더 긴 단어의
+        ///    접두사일 수 있다. 'sig' 스니펫을 둔 채 'signal'을 치면, s·i·g가 들어온
+        ///    순간 "단어 머리에서 버퍼가 약어로 끝났다"가 성립하지만 사용자는 아직
+        ///    단어를 다 치지 않았다. 여기서 발화하면 백스페이스와 n·a·l이 경합해
+        ///    'SIGNATURE-BLOCKnal'이 된다. 그래서 종결자(단어 문자가 아닌 글자)가
+        ///    실제로 타이핑될 때까지 기다린다. 버퍼가 <경계><약어><종결자>로 끝나야
+        ///    비로소 발화하고, 이때 종결자는 이미 화면에 있으므로 함께 지웠다가
+        ///    확장 내용 뒤에 다시 찍어준다.
+        public func match(buffer: String) -> Match? {
             guard maxLength > 0, !buffer.isEmpty else { return nil }
             let chars = Array(buffer)
-            let upper = min(maxLength, chars.count)
-            // Longest match wins, mirroring TextExpander behavior.
+            let n = chars.count
+            let upper = min(maxLength, n)
+
+            // 최장 우선. 어떤 후보가 거부돼도 더 짧은 접미사가 여전히 정당할 수 있으므로
+            // 스캔을 멈추지 않는다.
             for len in stride(from: upper, through: 1, by: -1) {
-                let start = chars.count - len
-                let suffix = String(chars[start...])
-                guard let snippet = exact[suffix] ?? insensitive[suffix.lowercased()] else {
-                    continue
+
+                // (1) 구두점 시작 약어 — 버퍼가 약어로 끝나면 즉시 발화.
+                let start = n - len
+                if let snippet = lookup(chars, start..<n),
+                   !Self.isWordCharacter(chars[start]) {
+                    return Match(snippet: snippet, backspaces: len, terminator: "")
                 }
 
-                // 단어 경계 검사. 약어가 단어 문자로 시작하는데 바로 앞 글자도
-                // 단어 문자라면, 사용자는 약어가 아니라 더 긴 단어를 치는 중이다
-                // ('sig' 스니펫을 둔 채 'design'을 치는 경우). 여기서 발화하면
-                // 아직 도착하지 않은 키와 백스페이스가 경합해 사용자가 친 글자를
-                // 비결정적으로 파괴한다.
-                //
-                // ';sig', '/addr' 처럼 구두점으로 시작하는 약어는 그 자체로 경계라
-                // 검사에서 제외한다 — 글자 바로 뒤에 와도 지금처럼 확장된다.
-                if Self.isWordCharacter(chars[start]),
-                   start > 0,
-                   Self.isWordCharacter(chars[start - 1]) {
-                    // 더 짧은 접미사가 여전히 정당한 매치일 수 있으므로 스캔을 계속한다.
-                    continue
+                // (2) 맨몸 약어 — <경계><약어><종결자> 로 끝나야 발화.
+                //     마지막 글자가 방금 타이핑된 종결자다.
+                let abbrevEnd = n - 1
+                let abbrevStart = abbrevEnd - len
+                if abbrevStart >= 0,
+                   !Self.isWordCharacter(chars[abbrevEnd]),
+                   let snippet = lookup(chars, abbrevStart..<abbrevEnd),
+                   Self.isWordCharacter(chars[abbrevStart]),
+                   // 약어 앞도 단어 경계여야 한다. 'desig ' 처럼 단어 안쪽에서
+                   // 종결된 경우는 여전히 발화하면 안 된다.
+                   abbrevStart == 0 || !Self.isWordCharacter(chars[abbrevStart - 1]) {
+                    let terminator = String(chars[abbrevEnd])
+                    return Match(
+                        snippet: snippet,
+                        backspaces: len + terminator.count,
+                        terminator: terminator
+                    )
                 }
-                return snippet
             }
             return nil
         }

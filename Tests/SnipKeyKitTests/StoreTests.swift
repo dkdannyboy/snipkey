@@ -63,6 +63,6 @@ final class StoreDefaultFileURLTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         let reloaded = Store(fileURL: url)
-        XCTAssertEqual(reloaded.matcher.match(buffer: ";e2e")?.content, "expanded-ok")
+        XCTAssertEqual(reloaded.matcher.match(buffer: ";e2e")?.snippet.content, "expanded-ok")
     }
 }
