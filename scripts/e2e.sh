@@ -32,6 +32,16 @@ CLIP_SENTINEL="E2E-CLIPBOARD-SENTINEL"
 SNIPKEY_PID=""
 SNIPKEY_WAS_RUNNING=0
 
+# TextEdit이 하네스 실행 전부터 떠 있었는지. 하네스가 직접 띄운 경우에만 끝나고
+# 종료해도 되고, 사용자가 쓰던 것이라면 손대면 안 된다.
+TEXTEDIT_WAS_RUNNING=0
+
+# TextEdit을 건드려도 되는지. preflight가 "열린 문서 0개"를 확인해야 1이 된다.
+# 0인 동안 cleanup은 TextEdit에 손대지 않는다 — 이게 없으면, 사용자 문서를 발견하고
+# exit 하는 가드가 trap을 통해 cleanup을 부르고, cleanup이 바로 그 문서를 닫아버린다.
+# 가드가 지키려던 것을 가드 때문에 잃는 꼴이 된다.
+TEXTEDIT_SAFE=0
+
 typeset -a FAILURES
 FAILURES=()
 typeset -a RESULTS
@@ -46,17 +56,30 @@ cleanup() {
   echo ""
   echo "▸ Cleaning up…"
 
-  # TextEdit: 저장하지 않고 닫는다. saving no 를 빼면 모달이 떠서 다음 실행까지 막는다.
-  # 타임아웃을 반드시 건다 — 정리 단계에서 멈추는 것이 가장 나쁘다. 응답이 없으면
-  # 강제 종료한다. 저장 안 한 문서는 어차피 하네스가 만든 것뿐이다.
-  if ! osascript -e 'with timeout of 8 seconds' \
-      -e 'tell application "TextEdit" to close every document saving no' \
-      -e 'end timeout' >/dev/null 2>&1; then
-    pkill -9 -x TextEdit 2>/dev/null
-  else
+  # TextEdit 정리.
+  #
+  # 여기서 닫는 문서는 전부 하네스가 만든 것이어야 한다. 그 보장은 preflight가
+  # 한다 — 열린 문서가 하나라도 있으면 아예 실행을 거부하므로, 이 시점에 존재하는
+  # 문서는 하네스가 만든 것뿐이다. 그 가드가 없으면 `close ... saving no`가
+  # 사용자의 저장 안 된 원고를 되돌릴 수 없게 날린다. 클립보드는 그렇게 조심스럽게
+  # 지켜놓고 남의 문서를 파괴하면 앞뒤가 맞지 않는다.
+  #
+  # `pkill -9`도 preflight 가드에 기대고 있다. 문서가 0개임이 보장된 경우에만
+  # 안전하며, 그마저도 하네스가 직접 띄운 TextEdit에만 쓴다.
+  if [[ "$TEXTEDIT_SAFE" -eq 1 ]]; then
     osascript -e 'with timeout of 8 seconds' \
-      -e 'tell application "TextEdit" to quit saving no' \
-      -e 'end timeout' >/dev/null 2>&1 || pkill -9 -x TextEdit 2>/dev/null
+      -e 'tell application "TextEdit" to close every document saving no' \
+      -e 'end timeout' >/dev/null 2>&1 || true
+
+    if [[ "$TEXTEDIT_WAS_RUNNING" -eq 0 ]]; then
+      # 하네스가 띄운 TextEdit이다. 원래 없던 것이니 되돌려 놓는다.
+      if ! osascript -e 'with timeout of 8 seconds' \
+          -e 'tell application "TextEdit" to quit saving no' \
+          -e 'end timeout' >/dev/null 2>&1; then
+        pkill -9 -x TextEdit 2>/dev/null
+      fi
+    fi
+    # 사용자가 원래 쓰던 TextEdit이면 종료하지 않는다. 켜 둔 채로 돌려준다.
   fi
 
   # 하네스가 띄운 SnipKey(임시 저장소를 물고 있는 놈)를 죽인다.
@@ -242,6 +265,43 @@ if [[ ! -s "$CLIP_BACKUP" ]] && osascript -e 'clipboard info' 2>/dev/null | grep
   echo "  경고: 비텍스트 클립보드를 버리고 진행한다 (사용자가 허용함)"
 fi
 echo "  클립보드 저장됨 ($(wc -c < "$CLIP_BACKUP" | tr -d ' ') bytes)"
+
+# TextEdit에 열린 문서가 하나라도 있으면 실행을 거부한다.
+#
+# 하네스는 문서 내용을 비우고(set text to "") 끝나면 저장 없이 닫는다. 그 대상이
+# 사용자의 저장하지 않은 원고라면 되돌릴 수 없이 파괴된다. 클립보드는 백업해서
+# 되살리지만, 문서는 되살릴 방법이 없다. 그러므로 유일한 방어는 아예 시작하지
+# 않는 것이다. 이 가드가 곧 cleanup의 "여기 있는 문서는 전부 하네스 것"이라는
+# 전제를 성립시킨다.
+if pgrep -x TextEdit >/dev/null 2>&1; then
+  TEXTEDIT_WAS_RUNNING=1
+
+  DOC_COUNT=$(osa 8 -e 'tell application "TextEdit" to count documents' 2>/dev/null || echo "unknown")
+
+  if [[ "$DOC_COUNT" == "unknown" || -z "$DOC_COUNT" ]]; then
+    echo "  ✗ TextEdit이 응답하지 않아 열린 문서가 있는지 확인할 수 없다."
+    echo "    확인하지 못한 채로 진행하면 저장 안 된 작업을 파괴할 수 있다."
+    echo "    TextEdit을 종료하고 다시 실행해라."
+    exit 1
+  fi
+
+  if [[ "$DOC_COUNT" -ne 0 ]]; then
+    echo "  ✗ TextEdit에 문서 ${DOC_COUNT}개가 열려 있다."
+    echo "    이 하네스는 TextEdit 문서를 비우고 저장 없이 닫으므로, 저장하지 않은"
+    echo "    작업이 있으면 되돌릴 수 없이 사라진다."
+    echo "    문서를 저장하고 닫은 뒤 다시 실행해라."
+    echo "    (클립보드와 달리 문서는 복원할 수단이 없어서 우회 옵션을 두지 않았다.)"
+    exit 1
+  fi
+
+  echo "  TextEdit 실행 중이지만 열린 문서 없음 — 안전"
+else
+  TEXTEDIT_WAS_RUNNING=0
+  echo "  TextEdit 미실행 — 하네스가 띄우고 끝나면 종료한다"
+fi
+
+# 여기까지 왔으면 TextEdit에 파괴할 사용자 문서가 없다. 이제 cleanup이 손대도 된다.
+TEXTEDIT_SAFE=1
 
 # 사용자의 SnipKey가 돌고 있으면 종료한다. 그대로 두면 그 인스턴스가
 # 진짜 저장소로 키를 가로채서, 테스트가 거짓으로 통과하거나 깨진다.
