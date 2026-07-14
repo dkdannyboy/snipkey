@@ -42,6 +42,16 @@ TEXTEDIT_WAS_RUNNING=0
 # 가드가 지키려던 것을 가드 때문에 잃는 꼴이 된다.
 TEXTEDIT_SAFE=0
 
+# 하네스가 소유하는 문서. 임시 파일을 열어서 만들기 때문에 이름으로 정확히 지목할 수
+# 있고, 그래서 "우리 문서만" 건드릴 수 있다.
+#
+# preflight의 "문서 0개" 검사만으로는 부족하다. 그건 한 순간의 스냅샷일 뿐이라,
+# 하네스가 도는 중에 사용자가 TextEdit 문서를 새로 열면 `document 1`이 그 문서를
+# 가리키게 되고, 내용이 지워지거나 저장 없이 닫힌다. 이름으로 소유를 고정하면 그
+# 경합 자체가 성립하지 않는다.
+E2E_DOC_NAME="snipkey-e2e-scratch.txt"
+E2E_DOC_PATH="$TMP_DIR/$E2E_DOC_NAME"
+
 typeset -a FAILURES
 FAILURES=()
 typeset -a RESULTS
@@ -67,16 +77,27 @@ cleanup() {
   # `pkill -9`도 preflight 가드에 기대고 있다. 문서가 0개임이 보장된 경우에만
   # 안전하며, 그마저도 하네스가 직접 띄운 TextEdit에만 쓴다.
   if [[ "$TEXTEDIT_SAFE" -eq 1 ]]; then
+    # 우리 문서만 닫는다. `close every document saving no`는 절대 쓰지 않는다 —
+    # 하네스가 도는 중에 사용자가 연 문서까지 저장 없이 날려버린다.
     osascript -e 'with timeout of 8 seconds' \
-      -e 'tell application "TextEdit" to close every document saving no' \
+      -e "tell application \"TextEdit\" to close (every document whose name is \"$E2E_DOC_NAME\") saving no" \
       -e 'end timeout' >/dev/null 2>&1 || true
 
     if [[ "$TEXTEDIT_WAS_RUNNING" -eq 0 ]]; then
       # 하네스가 띄운 TextEdit이다. 원래 없던 것이니 되돌려 놓는다.
-      if ! osascript -e 'with timeout of 8 seconds' \
-          -e 'tell application "TextEdit" to quit saving no' \
-          -e 'end timeout' >/dev/null 2>&1; then
-        pkill -9 -x TextEdit 2>/dev/null
+      # 단, 그새 사용자가 문서를 열어뒀다면 종료하지 않는다. 남의 작업을 닫는 것보다
+      # TextEdit이 하나 더 떠 있는 편이 낫다.
+      local remaining
+      remaining=$(osascript -e 'with timeout of 5 seconds' \
+        -e 'tell application "TextEdit" to count documents' \
+        -e 'end timeout' 2>/dev/null) || remaining=1
+
+      if [[ "$remaining" == "0" ]]; then
+        osascript -e 'with timeout of 8 seconds' \
+          -e 'tell application "TextEdit" to quit' \
+          -e 'end timeout' >/dev/null 2>&1 || true
+      else
+        echo "  TextEdit에 다른 문서가 열려 있어 종료하지 않는다"
       fi
     fi
     # 사용자가 원래 쓰던 TextEdit이면 종료하지 않는다. 켜 둔 채로 돌려준다.
@@ -125,9 +146,6 @@ wait_for() {
   return 1
 }
 
-# TextEdit 문서 텍스트를 읽는다. AppleEvent 실패를 빈 문자열로 뭉개면 안 된다 —
-# 그러면 "문서가 비어 있다"와 "읽지 못했다"가 구분되지 않아서, TextEdit의 일시적
-# 지연(-1712)이 곧바로 테스트 실패로 둔갑한다. 읽기에 실패하면 non-zero로 알린다.
 # [중요] 모든 AppleScript 호출은 `with timeout` 안에 있어야 한다.
 # osascript의 기본 AppleEvent 타임아웃은 2분이다. TextEdit이 한 번 응답을 멈추면
 # (실제로 그런 일이 있었다) 호출 하나가 2분씩 블록되고, wait_for의 초 단위 제한은
@@ -137,12 +155,15 @@ osa() {
   osascript -e "with timeout of ${timeout_sec} seconds" "$@" -e "end timeout"
 }
 
-# TextEdit 문서 텍스트를 읽는다. AppleEvent 실패를 빈 문자열로 뭉개면 안 된다 —
-# 그러면 "문서가 비어 있다"와 "읽지 못했다"가 구분되지 않아서, TextEdit의 일시적
-# 지연(-1712)이 곧바로 테스트 실패로 둔갑한다. 읽기에 실패하면 non-zero로 알린다.
+# 하네스가 소유한 문서의 텍스트를 읽는다. `document 1`(최전면)이 아니라 이름으로
+# 지목한다 — 사용자가 그 사이 문서를 열었더라도 남의 문서를 읽지 않기 위해서다.
+#
+# AppleEvent 실패를 빈 문자열로 뭉개면 안 된다. 그러면 "문서가 비어 있다"와
+# "읽지 못했다"가 구분되지 않아서, TextEdit의 일시적 지연(-1712)이 곧바로 테스트
+# 실패로 둔갑한다. 읽기에 실패하면 non-zero로 알린다.
 textedit_text() {
   local out
-  if ! out=$(osa 5 -e 'tell application "TextEdit" to get text of document 1' 2>&1); then
+  if ! out=$(osa 5 -e "tell application \"TextEdit\" to get text of document \"$E2E_DOC_NAME\"" 2>&1); then
     return 1
   fi
   if [[ "$out" == *"execution error"* || "$out" == *"timed out"* || "$out" == *"시간이 초과"* ]]; then
@@ -155,10 +176,25 @@ frontmost_app() {
   osa 5 -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null
 }
 
-# TextEdit이 살아 있고 AppleEvent에 응답하는지 본다. 응답하지 않으면 강제로
-# 되살린다 — 죽은 TextEdit을 상대로 케이스를 돌리면 SnipKey가 멀쩡한데도
-# 전부 빨갛게 뜬다.
+# 최전면 문서가 하네스 소유인지 본다. 아니라면 타이핑하면 안 된다 — 사용자가
+# 방금 연 문서에 키를 쏟아붓게 된다.
+front_doc_is_ours() {
+  local n
+  n=$(osa 5 -e 'tell application "TextEdit" to get name of document 1' 2>/dev/null) || return 1
+  [[ "$n" == "$E2E_DOC_NAME" ]]
+}
+
+# TextEdit이 응답하지 않을 때 되살린다. 죽은 TextEdit을 상대로 케이스를 돌리면
+# SnipKey가 멀쩡한데도 전부 빨갛게 뜬다.
+#
+# 강제 종료는 하네스가 직접 띄운 TextEdit에만 한다. 사용자가 쓰던 TextEdit이라면
+# 응답하지 않는다는 이유로 kill -9 할 수 없다 — 그 안에 저장 안 된 원고가 있는지
+# 확인할 방법조차 없는 상태이기 때문이다. 그럴 땐 되살리기를 포기하고 실패시킨다.
 revive_textedit() {
+  if [[ "$TEXTEDIT_WAS_RUNNING" -ne 0 ]]; then
+    echo "  TextEdit이 응답하지 않는다. 사용자가 쓰던 TextEdit이라 강제 종료하지 않는다."
+    return 1
+  fi
   echo "  TextEdit이 응답하지 않는다. 강제 재시작…"
   pkill -9 -x TextEdit 2>/dev/null || true
   sleep 2
@@ -166,31 +202,43 @@ revive_textedit() {
   sleep 2
 }
 
-# TextEdit에 새 문서를 열고 포커스가 실제로 갈 때까지 기다린다.
-# 포커스 없이 타이핑하면 키가 엉뚱한 앱으로 날아간다.
+# 하네스 소유 문서를 열고(없으면), 내용을 비우고, 최전면으로 가져온다.
+#
+# 임시 파일을 열어서 문서를 만든다. 그래야 이름으로 정확히 지목할 수 있고,
+# 사용자가 그 사이 다른 문서를 열어도 그쪽은 절대 건드리지 않는다. `document 1`
+# (최전면)을 쓰면 그 보장이 사라진다 — 사용자가 방금 연 문서가 최전면일 수 있다.
+#
+# 케이스마다 문서를 만들고 닫기를 반복하면 TextEdit이 그 사이클을 못 버티고
+# AppleEvent가 타임아웃(-1712)나기 시작한다. 그래서 문서 하나를 열어두고 재사용한다.
 new_document() {
   local attempt
   for attempt in 1 2; do
-    # 문서 하나를 보장하고 내용만 비운다. 케이스마다 문서를 만들고 닫기를
-    # 반복하면 TextEdit이 그 사이클을 못 버티고 AppleEvent가 타임아웃(-1712)
-    # 나기 시작한다 — 실제로 그렇게 무너져서 케이스 전체가 빨갛게 떴다.
-    # 문서를 재사용하는 편이 훨씬 안정적이다.
+    # 파일은 없을 때만 만든다. TextEdit이 열어둔 파일을 셸에서 truncate하면
+    # 문서 상태가 꼬여서 이후 AppleScript 호출이 통째로 실패한다 — 실제로 그렇게
+    # 케이스가 전부 "TextEdit 준비 실패"로 떨어졌다. 내용은 AppleScript로 비운다.
+    [[ -f "$E2E_DOC_PATH" ]] || : > "$E2E_DOC_PATH"
+
+    # `set index of window 1 to 1`은 넣지 않는다. 이미 1인 창에 대해 에러를 던져
+    # 블록 전체를 실패시킬 수 있고, 문서를 열면 어차피 그 창이 앞으로 나온다.
     if osa 15 \
         -e 'tell application "TextEdit"' \
         -e 'activate' \
-        -e 'if (count of documents) is 0 then make new document' \
-        -e 'set text of document 1 to ""' \
+        -e "if not (exists document \"$E2E_DOC_NAME\") then open POSIX file \"$E2E_DOC_PATH\"" \
+        -e "set text of document \"$E2E_DOC_NAME\" to \"\"" \
         -e 'end tell' >/dev/null 2>&1; then
-      if wait_for 10 '[[ "$(frontmost_app)" == "TextEdit" ]]'; then
+
+      # 최전면이 TextEdit이고, 그 안에서도 최전면 문서가 우리 것이어야 한다.
+      # 앱만 확인하면, 사용자가 열어둔 다른 문서에 키를 쏟아부을 수 있다.
+      if wait_for 10 '[[ "$(frontmost_app)" == "TextEdit" ]]' && wait_for 5 'front_doc_is_ours'; then
         # 문서 창이 키 입력을 받을 준비가 될 때까지 한 박자.
         sleep 0.4
         return 0
       fi
     fi
-    [[ $attempt -eq 1 ]] && revive_textedit
+    [[ $attempt -eq 1 ]] && { revive_textedit || return 1; }
   done
 
-  echo "  ✗ TextEdit을 준비하지 못했다 (현재 최전면: $(frontmost_app))"
+  echo "  ✗ 하네스 문서를 최전면으로 가져오지 못했다 (최전면 앱: $(frontmost_app))"
   return 1
 }
 
@@ -415,9 +463,13 @@ if ! wait_for 5 '[[ "$(textedit_text)" == *"ping"* ]]'; then
   exit 1
 fi
 echo "  타이핑 경로 정상"
+# 문서를 닫지 않고 내용만 비운다. 각 케이스가 new_document로 다시 비우므로 굳이
+# 닫을 이유가 없고, 여기서 `close every document`를 쓰면 사용자가 그새 연 문서까지
+# 저장 없이 날아간다.
+#
 # `|| true` 필수. 이 정리 한 줄이 실패하면 set -e가 하네스를 통째로 죽여서,
 # 케이스가 하나도 돌지 않은 채 조용히 끝난다. 실제로 그렇게 당했다.
-osa 8 -e 'tell application "TextEdit" to close every document saving no' >/dev/null 2>&1 || true
+osa 8 -e "tell application \"TextEdit\" to set text of document \"$E2E_DOC_NAME\" to \"\"" >/dev/null 2>&1 || true
 
 # ── 5. 케이스 ───────────────────────────────────────────────────────────────
 echo ""
