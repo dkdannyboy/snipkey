@@ -75,12 +75,29 @@ enum TextInjector {
         }
     }
 
+    /// 주입 직전에 '사용자가 계속 타이핑했는지'를 확인하기 위해 기다리는 시간.
+    ///
+    /// 가드는 이 창이 빠른 타이피스트의 키 간격(대략 100ms)보다 길 때만 의미가 있다.
+    /// 짧으면 사용자의 다음 글자가 '확인한 뒤, 백스페이스가 나가기 전'에 도착해서
+    /// 가드를 그대로 통과한다 — 잡으려던 바로 그 경합이 남는다.
+    ///
+    /// 대가는 정상 확장이 이만큼 늦어지는 것뿐이다. 종결자를 치고 잠시 멈춘 사용자는
+    /// 100ms 남짓 늦게 확장을 받는다. 그 대신, 계속 타이핑한 사용자는 자기 글자를
+    /// 잃지 않는다. 두 손실의 무게는 비교가 되지 않는다.
+    static let quiescenceSettle: Double = 0.12
+
     /// Full expansion: delete `backspaces` characters, paste `text`, position
     /// the cursor, then press any trailing keys. Runs asynchronously.
     ///
     /// `expectedPID` is the app that had focus when the abbreviation matched.
     /// If focus has since moved, the expansion is dropped rather than typed into
     /// whatever happens to be frontmost now.
+    ///
+    /// `quiescence`는 '지금 지워도 되는가'를 마지막으로 되묻는 콜백이다. 이벤트 탭이
+    /// `.listenOnly`라 사용자의 키는 우리보다 먼저 앱에 도착한다 — 매치 이후 사용자가
+    /// 타이핑을 이어갔다면 백스페이스는 약어가 아니라 그 뒤에 새로 들어온 글자를 지운다.
+    /// 그래서 첫 백스페이스가 나가기 '직전'에 물어보고, 아니라면 아무것도 하지 않는다:
+    /// 지우지도, 붙여넣지도, 클립보드를 건드리지도 않는다.
     static func expand(
         backspaces: Int,
         text: String,
@@ -89,6 +106,7 @@ enum TextInjector {
         restoreClipboardAfter: Double = 0.35,
         playSound: Bool = false,
         expectedPID: pid_t? = nil,
+        quiescence: (() -> ExpansionDecision)? = nil,
         completion: (() -> Void)? = nil
     ) {
         queue.async {
@@ -100,6 +118,22 @@ enum TextInjector {
             if let expectedPID, frontmostPID() != expectedPID {
                 Log.write("expansion cancelled — focus left the original app")
                 return
+            }
+
+            // 마지막 관문. 여기 아래로는 되돌릴 수 없는 키가 나간다.
+            //
+            // 확인은 반드시 '여기'여야 한다. 비동기 블록 맨 위에서 한 번 보고 마는 것으로는
+            // 부족하다 — 그 아래에 있는 sleep들(정착 40ms, 붙여넣기 전 80ms, …) 동안
+            // 사용자의 다음 글자가 얼마든지 도착할 수 있기 때문이다. frontmostPID()가
+            // 메인 큐를 동기로 기다리는 것도 마찬가지 이유로 이 앞에 둔다.
+            if let quiescence {
+                usleep(useconds_t(quiescenceSettle * 1_000_000))
+                if case .abort(let typedAhead) = quiescence() {
+                    // 확장을 통째로 버린다. 사용자는 확장을 못 볼 뿐이고, 친 글자는
+                    // 그대로 남는다. 약어를 다시 치고 잠깐 멈추면 확장된다.
+                    Log.write("expansion cancelled — user kept typing (\(typedAhead) keys arrived after the match)")
+                    return
+                }
             }
 
             for _ in 0..<backspaces {

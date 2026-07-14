@@ -742,6 +742,94 @@ run_case_return_terminator() {
     "(f) Return does NOT terminate a bare-word abbreviation" 36
 }
 
+# ── (h) 종결자 뒤로 타이핑을 이어가면 확장을 버린다 ─────────────────────────
+# (e)의 어두운 쌍둥이. (e)는 'sig ' 를 치고 `sleep 3` 으로 기다린다 — 사람이 확장을
+# 기다리며 멈춰 선 상황이다. 그래서 (e)는 이 버그를 볼 수 없었다.
+#
+# 실제로는 아무도 그렇게 치지 않는다. 'sig ' 뒤에 스페이스를 쳤다는 것은 문장을
+# 이어 쓰겠다는 뜻이고, 사용자는 바로 'next'를 친다. 확장은 비동기이고 느리다
+# (백스페이스·붙여넣기 사이의 sleep 때문에 100~300ms). 이벤트 탭은 .listenOnly라
+# 'next'는 우리보다 먼저 TextEdit에 도착한다. 그 뒤에 백스페이스 4번이 나가면
+# 지워지는 것은 'sig '가 아니라 'next'다 — 사용자가 방금 쓴 글자가 조용히 사라진다.
+#
+# 그래서 엔진은 매치 시점의 키 카운터를 기억했다가, 첫 백스페이스가 나가기 직전에
+# 다시 본다. 하나라도 늘었으면 확장을 통째로 버린다. 잘못된 자리에서 확장되는 것보다
+# 확장이 안 되는 편이 낫다.
+#
+# 타이핑은 반드시 한 번의 type_text로 'sig next'를 통째로 친다. 종결자와 다음 단어
+# 사이에 sleep을 넣는 순간 이 케이스는 (e)가 되어버리고, 잡으려던 경합이 사라진다.
+run_case_typing_ahead_aborts_expansion() {
+  local name="(h) typing through the terminator aborts the expansion (no corruption)"
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  local mark=$(log_lines)
+
+  # 끊지 않고 이어서 친다. 'sig ' 로 매치가 걸린 직후에도 n·e·x·t 가 계속 도착한다.
+  type_text "sig next"
+
+  # 확장(또는 취소)이 결론까지 가도록 기다린다.
+  sleep 3
+
+  # positive control. 이 케이스는 '확장이 일어나지 않았음'을 주장하므로, 로그가
+  # 조용한 이유가 '키가 엔진에 도달하지 않아서'일 수 있다. 확실히 확장되는 약어를
+  # 이어 쳐서 타이핑 경로가 살아 있음을 증명한다. 앞에 스페이스를 두어 단어 경계를 만든다.
+  type_text " ;e2e"
+  sleep 3
+
+  local logged
+  logged=$(log_since "$mark")
+
+  # 판정은 엔진 로그로 한다.
+  #   1) "matched 'sig'"                : 키가 엔진에 도달했고 매치까지 갔다.
+  #   2) "expansion cancelled — user kept typing" : 가드가 그 확장을 버렸다.
+  #   3) "inject done" 정확히 1회       : 실제로 주입된 것은 positive control(;e2e)뿐이다.
+  #      ('inject start'가 아니라 'inject done'을 센다. 'inject start'는 엔진이 주입을
+  #       '결정'한 시점에 찍히고, 가드는 그 뒤 인젝터 큐에서 판정하기 때문이다.
+  #       실제로 키가 나갔는지를 말해주는 것은 'inject done' 쪽이다.)
+  local sig_matched=0
+  echo "$logged" | grep -q "matched 'sig'" && sig_matched=1
+
+  local aborted=0
+  echo "$logged" | grep -q "expansion cancelled — user kept typing" && aborted=1
+
+  local done_count
+  done_count=$(echo "$logged" | grep -c "inject done" || true)
+
+  if [[ "$sig_matched" -eq 0 ]]; then
+    fail "$name" "'sig ' 가 매치되지 않았다 — 키가 엔진에 도달하지 않았거나 매처가 죽었다. 측정을 신뢰할 수 없다. 로그: $(echo "$logged" | tr '\n' ' ')"
+    return
+  fi
+  if [[ "$aborted" -eq 0 ]]; then
+    fail "$name" "매치 후 타이핑을 이어갔는데도 확장이 취소되지 않았다 — 파괴적 경합 재발. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+    return
+  fi
+  if [[ "$done_count" -ne 1 ]]; then
+    fail "$name" "'inject done' ${done_count}회 (기대: positive control ;e2e 1회뿐). 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+    return
+  fi
+
+  # 문서 확인. 로그가 이미 '백스페이스가 한 번도 나가지 않았다'를 증명하므로 이건
+  # 보조 확인이지만, 이 케이스의 요점('next'가 먹히지 않았다)을 눈으로 못 박는다.
+  # 기대: "sig next expanded-ok" — 'sig '는 확장되지 않고 그대로 남고, 'next'는 온전하다.
+  #
+  # 대소문자는 무시하고 비교한다. TextEdit이 스페이스로 단어가 끝나는 순간 문장 첫
+  # 단어를 자동 대문자화해서 's'가 'S'로 바뀌기 때문이다(macOS의 '자동으로 단어 대문자화').
+  # SnipKey가 한 일이 아니고, 엔진 로그가 백스페이스 0회를 증명한다. 글자가 먹히는 것과는
+  # 무관한 변형이므로 이것만 흡수한다 — 글자 수·순서는 그대로 못 박는다. 문서 '전체'를
+  # 기대값과 통째로 맞춰보므로, 한 글자라도 사라지면 여기서 걸린다.
+  local text
+  if text=$(textedit_text); then
+    if [[ "${text:l}" != "sig next expanded-ok" ]]; then
+      fail "$name" "엔진은 취소했지만 문서=[$text] — 기대(대소문자 무시): 'sig next expanded-ok'. 사용자가 친 글자가 먹혔거나 엉뚱한 것이 들어갔다."
+      return
+    fi
+    pass "$name  문서=[$text]"
+  else
+    pass "$name  (엔진 로그로 취소 확인됨; TextEdit이 응답하지 않아 문서 확인은 생략)"
+  fi
+}
+
 run_case_tab_terminator() {
   run_case_side_effect_key_does_not_expand \
     "(g) Tab does NOT terminate a bare-word abbreviation" 48
@@ -753,6 +841,7 @@ run_case_word_prefix_no_expansion
 run_case_terminated_bare_word_expands
 run_case_return_terminator
 run_case_tab_terminator
+run_case_typing_ahead_aborts_expansion
 run_case_clipboard_preserved
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────
