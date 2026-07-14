@@ -31,6 +31,17 @@ mid-keystroke. Type `sig ` and you get your signature followed by the space, rig
 where you put it. Punctuation-prefixed abbreviations are the ones to reach for
 when you want expansion the moment you stop typing.
 
+**Return and Tab do not terminate a bare-word abbreviation.** They end the word,
+but SnipKey deliberately ignores them, and the reason is worth knowing. SnipKey
+watches keystrokes without swallowing them, so by the time it could act, the key
+has already reached the app — and Return and Tab *do things*. Return sends the
+message in Slack. Tab moves focus to the next field in a form. If SnipKey expanded
+on them, `sig` would get sent as a message before the signature arrived, or the
+signature would land in the field you just tabbed into. Expanding in the wrong
+place is worse than not expanding, so it does not. Finish with a space or a
+punctuation mark, or use a `;sig`-style abbreviation, which never waits for a
+terminator at all.
+
 **Search anywhere (⌘/).** Cannot remember an abbreviation? Press ⌘/ while typing
 in any app, search your whole library by abbreviation, label, or content, and
 press Return to expand the one you want. This is what makes a library of

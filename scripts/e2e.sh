@@ -269,6 +269,13 @@ end timeout
 EOF
 }
 
+# 키코드 하나를 보낸다. Return(36)·Tab(48)처럼 `keystroke`로는 칠 수 없는 키용.
+# `|| true` 필수 — 실패는 어설션이 잡아야지 set -e가 하네스를 죽여서는 안 된다.
+send_key_code() {
+  osa 10 -e "tell application \"System Events\" to key code $1" >/dev/null 2>&1 || true
+  sleep 0.3
+}
+
 # 엔진의 키 버퍼를 비운다. Escape는 ExpansionEngine이 buffer=""로 처리하는 키다.
 # 케이스 사이에 앞 케이스의 잔여 버퍼가 새어 들어가는 것을 막는다.
 clear_engine_buffer() {
@@ -679,10 +686,73 @@ run_case_terminated_bare_word_expands() {
   fi
 }
 
+# ── (f)(g) Return·Tab은 종결자가 아니다 ────────────────────────────────────
+# 종결자로 안전한 키는 '글자를 넣는 것 말고는 아무 일도 하지 않는 키'뿐이다.
+# 이벤트 탭이 .listenOnly라 키는 앱에 먼저 도착한다. 스페이스라면 공백 한 칸이
+# 들어갈 뿐이라 지우고 확장한 뒤 다시 찍으면 그만이다.
+#
+# Return과 Tab에는 부작용이 있다:
+#   - Slack·메시지·검색창에서 Return은 '전송'이다. 종결자로 받으면 'sig'가 그대로
+#     전송된 뒤 서명이 비어버린 입력창에 붙는다.
+#   - 폼에서 Tab은 '다음 필드로 포커스 이동'이다. 백스페이스와 붙여넣기가 나갈 때
+#     커서는 이미 옆 칸에 있어서, 서명이 엉뚱한 칸에 박힌다.
+# 확장이 안 되는 것보다 잘못된 곳에 확장되는 것이 나쁘다. 그래서 이 두 키는
+# 버퍼를 비우기만 한다.
+#
+# 이 케이스는 그 결정을 못 박는다. 누군가 "Return으로도 확장되면 편할 텐데"라며
+# 되돌리면 여기서 잡힌다. (TextEdit에서는 Return이 그냥 개행이라 잘 도는 것처럼
+# 보이는데, 그래서 더더욱 자동 검증이 필요하다.)
+run_case_side_effect_key_does_not_expand() {
+  local name="$1" keycode="$2"
+
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  local mark=$(log_lines)
+  type_text "sig"
+  send_key_code "$keycode"
+  sleep 2
+
+  # positive control. 이 키가 확장을 발화시키지 '않는다'를 검증하는 케이스이므로,
+  # 로그가 조용한 것이 '키가 아예 도달하지 않아서'일 수도 있다. 확실히 확장되는
+  # 약어를 이어 쳐서 타이핑 경로가 살아 있음을 증명한다.
+  type_text " ;e2e"
+  sleep 3
+
+  local logged
+  logged=$(log_since "$mark")
+
+  local sig_matched=0
+  echo "$logged" | grep -q "matched 'sig'" && sig_matched=1
+
+  local injects
+  injects=$(echo "$logged" | grep -c "inject start" || true)
+
+  if [[ "$sig_matched" -eq 1 ]]; then
+    fail "$name" "'sig' + key code $keycode 로 확장이 발화했다 — 이 키는 부작용(전송/포커스이동)이 먼저 일어나므로 종결자로 쓰면 안 된다. 로그: $(echo "$logged" | grep -E "matched|inject start" | tr '\n' ' ')"
+  elif [[ "$injects" -ne 1 ]]; then
+    fail "$name" "타이핑 도달 확인 실패 — 'inject start' ${injects}회 (기대: ;e2e 확장 1회). 측정을 신뢰할 수 없다."
+  else
+    pass "$name  ('sig' 미발화, ';e2e'만 확장되어 타이핑 도달 확인됨)"
+  fi
+}
+
+run_case_return_terminator() {
+  run_case_side_effect_key_does_not_expand \
+    "(f) Return does NOT terminate a bare-word abbreviation" 36
+}
+
+run_case_tab_terminator() {
+  run_case_side_effect_key_does_not_expand \
+    "(g) Tab does NOT terminate a bare-word abbreviation" 48
+}
+
 run_case_plain_expansion
 run_case_substring_no_expansion
 run_case_word_prefix_no_expansion
 run_case_terminated_bare_word_expands
+run_case_return_terminator
+run_case_tab_terminator
 run_case_clipboard_preserved
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────

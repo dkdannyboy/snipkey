@@ -132,16 +132,16 @@ final class ExpansionEngine {
         }
 
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
-        switch keyCode {
-        case kVK_Delete:
+        switch KeyClassifier.action(forKeyCode: keyCode) {
+        case .deleteLast:
             if !buffer.isEmpty { buffer.removeLast() }
             return
-        case kVK_Return, kVK_ANSI_KeypadEnter, kVK_Tab, kVK_Escape,
-             kVK_LeftArrow, kVK_RightArrow, kVK_UpArrow, kVK_DownArrow,
-             kVK_Home, kVK_End, kVK_PageUp, kVK_PageDown, kVK_ForwardDelete:
+
+        case .clearBuffer:
             buffer = ""
             return
-        default:
+
+        case .literal:
             break
         }
 
@@ -152,6 +152,13 @@ final class ExpansionEngine {
         let typed = String(utf16CodeUnits: chars, count: length)
         guard !typed.isEmpty, typed.unicodeScalars.allSatisfy({ !$0.properties.isDefaultIgnorableCodePoint }) else { return }
 
+        // 스페이스나 구두점도 여기로 들어온다. 종결자 판정은 매처가 한다 —
+        // 이 층은 '타이핑된 글자'와 '버퍼를 무효화하는 키'만 구분하면 된다.
+        appendAndMatch(typed)
+    }
+
+    /// 버퍼에 글자를 붙이고 매칭을 시도한다. 매치되면 버퍼를 비우고 확장을 건다.
+    private func appendAndMatch(_ typed: String) {
         buffer += typed
         if buffer.count > maxBuffer {
             buffer = String(buffer.suffix(maxBuffer))

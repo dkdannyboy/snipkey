@@ -101,7 +101,14 @@ final class MatcherWordBoundaryTests: XCTestCase {
         XCTAssertEqual(dot?.backspaces, 4)
         XCTAssertEqual(dot?.terminator, ".")
 
-        for term in [",", "!", ")", "?", ";", "\n", "\t"] {
+        // "\n"과 "\t"는 일부러 뺐다. 매처는 순수 함수라서 그 버퍼가 오면 종결자로
+        // 인정하지만, 이벤트 층이 Return·Tab을 매처에 넘기지 않으므로 그런 버퍼는
+        // 애초에 만들어지지 않는다 (KeyClassifier 참고 — 두 키는 전송·포커스이동이라는
+        // 부작용이 먼저 일어나기 때문에 종결자로 쓸 수 없다).
+        //
+        // 여기에 "\n"을 넣으면 테스트는 초록인데 앱에서는 동작하지 않는 계약이 된다.
+        // 실제로 그런 상태였고, 적대적 리뷰가 그걸 잡아냈다.
+        for term in [",", "!", ")", "?", ";", " "] {
             let match = m.match(buffer: "sig\(term)")
             XCTAssertEqual(match?.snippet.content, "SIGNATURE-BLOCK", "종결자 '\(term)'")
             XCTAssertEqual(match?.backspaces, 4, "종결자 '\(term)'")
