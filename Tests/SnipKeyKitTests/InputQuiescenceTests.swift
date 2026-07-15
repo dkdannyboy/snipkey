@@ -123,6 +123,25 @@ final class InputQuiescenceTests: XCTestCase {
         assertAborts(clock.decide(quiescence), "무장 뒤에 도착한 키")
     }
 
+    /// 이벤트 콜백이 순서를 뒤집어 도착해도, '무장 이후에 입력이 있었다'는 사실은
+    /// 지워지면 안 된다.
+    ///
+    /// 시계가 마지막 mark 값을 그냥 덮어쓰면, 오래된 이벤트의 콜백이 새 이벤트보다
+    /// 늦게 돌 때 저장된 시각이 '뒤로' 밀린다. 그러면 무장 이후에 사용자가 분명히
+    /// 쳤는데도 decide가 proceed를 내고, 백스페이스가 옮겨간 커서 자리의 글자를 지운다.
+    /// 필인 경로의 정확성이 통째로 타임스탬프 순서에 기대고 있으므로, 저장값은
+    /// 마지막 값이 아니라 '가장 최신 이벤트 시각(high-water mark)'이어야 한다.
+    func testOutOfOrderEventDeliveryStillAborts() {
+        let clock = InputClock(now: { 100.0 })
+        let quiescence = clock.arm()          // armedAt = 100.0
+
+        clock.mark(at: 100.05)                // 무장 이후의 진짜 입력 — 이게 확장을 막아야 한다
+        clock.mark(at: 99.99)                 // 더 오래된 이벤트의 콜백이 뒤늦게 도착
+
+        // 뒤늦게 온 99.99가 100.05를 밀어내면 안 된다.
+        assertAborts(clock.decide(quiescence), "순서가 뒤바뀌어도 무장 이후 입력은 남아야 한다")
+    }
+
     /// CGEvent.timestamp와 monotonicNow()는 반드시 같은 시간축이어야 한다. 다르면
     /// '무장 이전/이후' 비교가 통째로 무의미해진다.
     ///

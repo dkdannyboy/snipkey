@@ -98,9 +98,14 @@ public final class InputClock: @unchecked Sendable {
     /// SnipKey가 스스로 쏜 합성 이벤트는 절대 여기 오면 안 된다. 오면 인젝터의 첫
     /// 백스페이스가 바로 그 확장을 스스로 취소해 버린다. (합성 키는 magicUserData로
     /// 걸러지고, 우리는 합성 마우스 이벤트를 아예 쏘지 않는다.)
+    ///
+    /// 저장값은 '가장 최신 이벤트 시각'이다 — 마지막으로 처리한 콜백의 시각이 아니라.
+    /// 이벤트 콜백이 순서를 뒤집어 도착하면(오래된 이벤트가 나중에 처리) 그냥 덮어쓰기는
+    /// 시각을 뒤로 밀어, 무장 이후에 분명히 있었던 입력을 지워버린다. 그러면 decide가
+    /// 잘못 proceed를 내고 백스페이스가 옮겨간 커서 자리를 파괴한다. max로 못 박는다.
     public func mark(at eventTime: TimeInterval) {
         lock.lock()
-        last = eventTime
+        last = Swift.max(last ?? eventTime, eventTime)
         lock.unlock()
     }
 
