@@ -131,7 +131,8 @@ enum TextInjector {
                 if case .abort = quiescence() {
                     // 확장을 통째로 버린다. 사용자는 확장을 못 볼 뿐이고, 친 글자는
                     // 그대로 남는다. 약어를 다시 치고 잠깐 멈추면 확장된다.
-                    Log.write("expansion cancelled — user kept typing after the match")
+                    // '입력'은 키 입력일 수도, 마우스 클릭일 수도 있다.
+                    Log.write("expansion cancelled — user input after the match")
                     return
                 }
             }

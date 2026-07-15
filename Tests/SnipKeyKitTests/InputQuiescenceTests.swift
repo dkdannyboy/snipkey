@@ -24,15 +24,39 @@ final class InputQuiescenceTests: XCTestCase {
     /// 가드가 정상 확장을 죽이면 안 된다 — 그건 고치는 게 아니라 망가뜨리는 것이다.
     func testProceedsWhenNoKeyArrivedAfterArming() {
         let sut = InputQuiescenceGuard(armedAt: 10.0)
-        XCTAssertEqual(sut.decide(lastRealKeyAt: 9.99), .proceed)   // 종결자 자신
-        XCTAssertEqual(sut.decide(lastRealKeyAt: nil), .proceed)    // 아직 아무 키도 없음
+        XCTAssertEqual(sut.decide(lastInputAt: 9.99), .proceed)   // 종결자 자신
+        XCTAssertEqual(sut.decide(lastInputAt: nil), .proceed)    // 아직 아무 키도 없음
     }
 
     /// 'sig ' 매치 직후에도 'next'를 이어 친 실제 시나리오.
     /// 여기서 진행하면 백스페이스 4번이 'next'를 통째로 먹는다.
     func testAbortsWhenAKeyArrivedAfterArming() {
         let sut = InputQuiescenceGuard(armedAt: 10.0)
-        assertAborts(sut.decide(lastRealKeyAt: 10.05), "무장 50ms 뒤에 도착한 키")
+        assertAborts(sut.decide(lastInputAt: 10.05), "무장 50ms 뒤에 도착한 키")
+    }
+
+    // MARK: - 마우스 클릭 — Codex가 no-ship으로 올린 경로
+
+    /// 매치 이후 같은 앱 안에서 클릭한 경우. 클릭은 키를 하나도 남기지 않고 커서만
+    /// 옮기므로 PID 검사도, 예전의 '키 입력' 검사도 통과했다. 백스페이스는 그 클릭한
+    /// 자리를 지운다.
+    ///
+    /// 가드 자체는 입력의 종류를 모른다 — 시각 하나만 본다. 그래서 클릭이든 키든
+    /// '무장 이후 시각'이면 똑같이 중단이다. 이 테스트는 그 사실을 못 박는다. 실제
+    /// 배선(마우스 이벤트에서 clock.mark를 부르는가)은 앱 타깃에 있어 E2E (k)가 지킨다.
+    func testAbortsWhenInputArrivedAfterArmingRegardlessOfSource() {
+        let armed = InputQuiescenceGuard(armedAt: 10.0)
+        // 이 값은 마우스 클릭의 이벤트 시각일 수도, 키의 이벤트 시각일 수도 있다 —
+        // 가드는 구분하지 않는다.
+        assertAborts(armed.decide(lastInputAt: 10.07), "무장 뒤에 도착한 입력(클릭이든 키든)")
+    }
+
+    /// 패널 '안'을 클릭한 것은 정상 필인을 취소시키면 안 된다. 그 클릭의 이벤트 시각은
+    /// 패널이 닫히는 순간(무장) 이전이기 때문이다 — 패널을 닫는 Return과 정확히 같은 논리다.
+    func testProceedsWhenTheClickHappenedInsideThePanelBeforeArming() {
+        let clickInsidePanel = 9.95
+        let armedAtDismissal = InputQuiescenceGuard(armedAt: 10.0)
+        XCTAssertEqual(armedAtDismissal.decide(lastInputAt: clickInsidePanel), .proceed)
     }
 
     // MARK: - 필인 패널 — Codex가 찾아낸 파괴 경로
@@ -41,7 +65,7 @@ final class InputQuiescenceTests: XCTestCase {
     /// 뒤늦게 나가는 백스페이스가 약어가 아니라 그 글자를 먹는다.
     func testAbortsWhenAKeyLandsDuringTheFocusReactivationWindow() {
         let armedAtDismissal = InputQuiescenceGuard(armedAt: 10.0)
-        assertAborts(armedAtDismissal.decide(lastRealKeyAt: 10.10), "재활성화 창에서 도착한 키")
+        assertAborts(armedAtDismissal.decide(lastInputAt: 10.10), "재활성화 창에서 도착한 키")
     }
 
     /// 정숙(quiescence) 모델이 놓쳤던 바로 그 경우 — 그리고 이 테스트의 존재 이유.
@@ -62,7 +86,7 @@ final class InputQuiescenceTests: XCTestCase {
         XCTAssertGreaterThan(injectionCheck - lastKeyOfTheWord, 0.12, "이 시점엔 '정숙'하다 — 그래서 정숙 모델이 통과시켰다")
 
         assertAborts(
-            armedAtDismissal.decide(lastRealKeyAt: lastKeyOfTheWord),
+            armedAtDismissal.decide(lastInputAt: lastKeyOfTheWord),
             "단어를 치고 멈춘 사용자 (정숙하지만 텍스트는 이미 바뀌었다)"
         )
     }
@@ -77,7 +101,7 @@ final class InputQuiescenceTests: XCTestCase {
         let armedAtDismissal = InputQuiescenceGuard(armedAt: 10.0)  // 패널이 닫히며 무장
 
         // 탭 콜백이 늦게 돌아 10.05에야 이 키를 기록하더라도, 기록되는 값은 '이벤트 시각'이다.
-        XCTAssertEqual(armedAtDismissal.decide(lastRealKeyAt: returnEventTime), .proceed)
+        XCTAssertEqual(armedAtDismissal.decide(lastInputAt: returnEventTime), .proceed)
     }
 
     // MARK: - 시계
@@ -85,9 +109,9 @@ final class InputQuiescenceTests: XCTestCase {
     /// 시계는 마지막 키의 이벤트 시각을 들고, 무장은 '지금'을 기준으로 잡는다.
     func testClockArmsAtNowAndTracksTheMostRecentEventTime() {
         var now: TimeInterval = 100
-        let clock = KeystrokeClock(now: { now })
+        let clock = InputClock(now: { now })
 
-        XCTAssertNil(clock.lastKeyAt)
+        XCTAssertNil(clock.lastInputAt)
         XCTAssertEqual(clock.decide(clock.arm()), .proceed)
 
         clock.mark(at: 99.99)                 // 종결자 — 무장보다 이전
@@ -109,12 +133,12 @@ final class InputQuiescenceTests: XCTestCase {
     ///
     /// 이 테스트는 그 사실을 못 박는다. 변환이 어긋나면 여기서 잡힌다.
     func testEventTimestampSharesTheSameTimeBaseAsMonotonicNow() {
-        let before = KeystrokeClock.monotonicNow()
+        let before = InputClock.monotonicNow()
         // CGEvent.timestamp가 주는 것과 같은 종류의 값(부팅 이후 나노초).
         let eventLike = DispatchTime.now().uptimeNanoseconds
-        let after = KeystrokeClock.monotonicNow()
+        let after = InputClock.monotonicNow()
 
-        let converted = KeystrokeClock.seconds(sinceBootNanos: eventLike)
+        let converted = InputClock.seconds(sinceBootNanos: eventLike)
         XCTAssertGreaterThanOrEqual(converted, before)
         XCTAssertLessThanOrEqual(converted, after)
     }
@@ -130,7 +154,7 @@ final class InputQuiescenceTests: XCTestCase {
         }
 
         let raw: UInt64 = 2_705_021_535_549_333            // 실측 CGEvent.timestamp
-        let asNanos = KeystrokeClock.seconds(sinceBootNanos: raw)
+        let asNanos = InputClock.seconds(sinceBootNanos: raw)
         let asMach = Double(raw) * Double(timebase.numer) / Double(timebase.denom) / 1_000_000_000
 
         XCTAssertEqual(asNanos, 2_705_021.535549333, accuracy: 0.001)
@@ -139,10 +163,10 @@ final class InputQuiescenceTests: XCTestCase {
 
     /// 시계는 이벤트 탭(메인 런루프)에서 쓰이고 인젝터 큐에서 읽힌다.
     func testClockIsSafeUnderConcurrentMarks() {
-        let clock = KeystrokeClock()
+        let clock = InputClock()
         DispatchQueue.concurrentPerform(iterations: 1_000) { i in
             clock.mark(at: TimeInterval(i))
         }
-        XCTAssertNotNil(clock.lastKeyAt)
+        XCTAssertNotNil(clock.lastInputAt)
     }
 }

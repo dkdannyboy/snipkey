@@ -792,7 +792,7 @@ run_case_typing_ahead_aborts_expansion() {
 
   # 판정은 엔진 로그로 한다.
   #   1) "matched 'sig'"                : 키가 엔진에 도달했고 매치까지 갔다.
-  #   2) "expansion cancelled — user kept typing" : 가드가 그 확장을 버렸다.
+  #   2) "expansion cancelled — user input after the match" : 가드가 그 확장을 버렸다.
   #   3) "inject done" 정확히 1회       : 실제로 주입된 것은 positive control(;e2e)뿐이다.
   #      ('inject start'가 아니라 'inject done'을 센다. 'inject start'는 엔진이 주입을
   #       '결정'한 시점에 찍히고, 가드는 그 뒤 인젝터 큐에서 판정하기 때문이다.
@@ -801,7 +801,7 @@ run_case_typing_ahead_aborts_expansion() {
   echo "$logged" | grep -q "matched 'sig'" && sig_matched=1
 
   local aborted=0
-  echo "$logged" | grep -q "expansion cancelled — user kept typing" && aborted=1
+  echo "$logged" | grep -q "expansion cancelled — user input after the match" && aborted=1
 
   local done_count
   done_count=$(echo "$logged" | grep -c "inject done" || true)
@@ -924,7 +924,7 @@ EOF
   echo "$logged" | grep -q "matched ';fill'" && matched=1
 
   local aborted=0
-  echo "$logged" | grep -q "expansion cancelled — user kept typing" && aborted=1
+  echo "$logged" | grep -q "expansion cancelled — user input after the match" && aborted=1
 
   # 'inject done'을 센다. 'inject start'는 엔진이 주입을 '결정'한 시점에 찍히고,
   # 가드는 그 뒤 인젝터 큐에서 판정하므로 실제로 키가 나갔는지를 말해주지 않는다.
@@ -1055,6 +1055,149 @@ run_case_focus_change_during_settle_aborts() {
   fi
 }
 
+# ── (k) 같은 앱 안을 클릭해도 확장을 버린다 ────────────────────────────────
+# Codex가 no-ship으로 올린 경로. (j)는 '다른 앱으로' 포커스가 떠나는 경우를 막았지만,
+# 그건 PID가 바뀌므로 포커스 재확인이 잡는다. 같은 앱 '안'을 클릭하면 PID는 그대로다 —
+# 포커스 확인 둘 다 통과한다. 그런데 클릭은 커서를 옮긴다. 매치 이후 대상 앱 다른
+# 위치를 클릭하면, 뒤이어 나가는 백스페이스가 약어가 아니라 그 클릭한 자리를 지운다.
+# 키를 하나도 남기지 않으므로 예전의 '키 입력' 검사도 통과했다. 이걸 잡는 유일한 방법이
+# 입력 시계에 '마우스 클릭도' 찍는 것이다. 이 케이스가 그 배선을 못 박는다.
+#
+# 필인 경로를 쓴다 — 일반 경로가 아니라. 이유는 오직 '창(window) 폭' 때문이다:
+#   - 일반 경로: 매치 → 백스페이스까지 40~160ms. 이 120ms 창 안에 클릭을 맞추려면
+#     로그 anchor + 배경 서브셸로 타이밍을 재야 하는데, 실기(實機) 경합에서 매번 흔들린다.
+#   - 필인 경로: 패널이 닫히고(=무장) 주입까지 0.25s + 정착 0.12s = 약 400ms. 클릭 하나를
+#     여유 있게 떨어뜨릴 수 있어 타이밍 레이스가 사라진다.
+# 검증하는 배선(마우스 down → inputClock.mark)은 두 경로가 완전히 동일하다.
+#
+# 시나리오: ';fill' 발화 → 패널에 값 채우고 Return으로 닫음(포커스가 TextEdit으로 복귀,
+# 여기서 무장) → 잠시 뒤 TextEdit 한복판을 '클릭' → 무장 이후의 입력이므로 확장이 취소됨.
+# 패널에 친 값과 Return은 이벤트 시각이 무장보다 이르므로 걸리지 않는다 — 오직 클릭만.
+run_case_same_app_click_aborts() {
+  local name="(k) a same-app mouse click before injection aborts the expansion"
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  # 클릭 지점을 미리 구한다 — TextEdit 창 정중앙(텍스트 영역 한복판이라 포커스가
+  # TextEdit을 벗어나지 않는다). bounds = "left, top, right, bottom" (스크린 좌표).
+  local bounds
+  bounds=$(osa 5 -e 'tell application "TextEdit" to get bounds of front window' 2>/dev/null) || bounds=""
+  if [[ -z "$bounds" ]]; then
+    fail "$name" "TextEdit 창 bounds를 읽지 못해 클릭 지점을 정할 수 없다"
+    return
+  fi
+  local l t r b cx cy
+  IFS=', ' read -r l t r b <<< "$bounds"
+  cx=$(( (l + r) / 2 ))
+  cy=$(( (t + b) / 2 ))
+
+  # 클릭 합성기를 컴파일한다. System Events의 `click at`은 접근성 API를 타서 우리
+  # CGEvent 탭에 아예 도달하지 않는다(키 입력은 도달하지만 이 클릭은 안 된다 — 실측 확인).
+  # 그래서 진짜 CGEvent 마우스 이벤트를 .cghidEventTap으로 쏘는 작은 헬퍼를 만든다.
+  # 인젝터가 바로 그 경로로 합성 키를 쏘고 우리 탭이 그걸 보므로(magicUserData로 걸러낸다),
+  # 이 헬퍼가 쏘는 클릭도 탭이 본다. magicUserData를 안 붙이니 '진짜 사용자 클릭'으로 잡힌다.
+  local clicker_bin="$TMP_DIR/e2e-click"
+  if [[ ! -x "$clicker_bin" ]]; then
+    cat > "$TMP_DIR/click.swift" <<'SWIFT'
+import CoreGraphics
+import Foundation
+let a = CommandLine.arguments
+guard a.count >= 3, let x = Double(a[1]), let y = Double(a[2]) else { exit(2) }
+let p = CGPoint(x: x, y: y)
+let s = CGEventSource(stateID: .combinedSessionState)
+CGEvent(mouseEventSource: s, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+usleep(20_000)
+CGEvent(mouseEventSource: s, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+SWIFT
+    if ! swiftc "$TMP_DIR/click.swift" -o "$clicker_bin" 2>/dev/null; then
+      fail "$name" "클릭 합성기 컴파일 실패 — 이 경로를 측정할 수 없다"
+      return
+    fi
+  fi
+
+  # 헬퍼를 데운다. 컴파일된 바이너리라도 첫 실행은 dyld 로딩으로 100~200ms가 더 걸려서,
+  # 그 지연이 클릭을 주입 판정(무장 +약 410ms) 경계 밖으로 밀어냈다 — 실측으로 20ms
+  # 차이로 놓쳤다. 미리 한 번 TextEdit 한복판을 클릭해 두면(빈 문서라 무해하다) 진짜
+  # 클릭은 캐시에서 즉시 뜬다. 이 예열 클릭은 무장(패널 닫힘)보다 한참 이전이라 판정에
+  # 걸리지 않는다.
+  "$clicker_bin" "$cx" "$cy" >/dev/null 2>&1 || true
+  sleep 0.2
+
+  local mark=$(log_lines)
+
+  # 구두점 시작 약어라 종결자 없이 즉시 발화한다 → 필인 패널이 뜬다.
+  type_text ";fill"
+  if ! wait_for 8 'grep -q "fill panel presented" "$LOG"'; then
+    fail "$name" "필인 패널이 뜨지 않았다 — 이 경로를 측정할 수 없다. 로그: $(log_since "$mark" | tr '\n' ' ')"
+    return
+  fi
+
+  # 필드를 채우고 Return으로 닫는다. Return이 패널을 닫는 순간 인젝터용 가드가 무장된다.
+  osascript >/dev/null 2>&1 <<'EOF' || true
+with timeout of 60 seconds
+  tell application "System Events"
+    repeat with c in characters of "VAL"
+      keystroke (c as text)
+      delay 0.05
+    end repeat
+    key code 36
+  end tell
+end timeout
+EOF
+
+  # 곧바로(포커스 복귀 직후) 대상 앱 한복판을 클릭한다. 인젝터의 최종 판정은 패널
+  # 닫힘 + 0.25s + 정착 0.12s = 약 370ms 뒤다. 여기서 0.05s만 쉬고 클릭하면(osascript
+  # 스폰까지 쳐도 약 110ms) 판정보다 260ms 앞서 여유롭게 떨어진다. 0.18s로 늦추면
+  # 스폰 지연까지 겹쳐 판정 경계에 걸려 흔들린다 — 실제로 그렇게 놓쳤다.
+  #
+  # 클릭은 무장(패널 닫힘) '이후'이므로 입력 시계에 잡혀 확장을 취소시킨다. 이 시점엔
+  # 포커스가 이미 TextEdit으로 돌아와 있어(activate는 패널 닫힘 직후 수십 ms) 클릭이
+  # 창 밖으로 새지 않는다.
+  sleep 0.05
+  "$clicker_bin" "$cx" "$cy" >/dev/null 2>&1 || true
+
+  sleep 3
+
+  local logged
+  logged=$(log_since "$mark")
+
+  # 판정은 전적으로 엔진 로그다.
+  #   1) "matched ';fill'"                   : 발화가 엔진에 도달했다.
+  #   2) "user input after the match"        : 매치 이후의 입력이 확장을 취소시켰다. 이
+  #      시나리오에서 무장 이후의 유일한 사용자 입력은 그 클릭뿐이다 — 곧 '클릭이 엔진에
+  #      도달했고 입력 시계에 찍혔다'는 증거다.
+  #   3) "inject done" 0회                   : 되돌릴 수 없는 키가 하나도 나가지 않았다.
+  local matched=0
+  echo "$logged" | grep -q "matched ';fill'" && matched=1
+
+  local cancelled=0
+  echo "$logged" | grep -q "expansion cancelled — user input after the match" && cancelled=1
+
+  # 클릭이 TextEdit을 벗어났는지. 벗어났다면 포커스 재확인((j)의 가드)이 대신 잡는다 —
+  # 확장은 안전하게 취소됐지만, 이 케이스가 노리는 '같은 앱 입력 시계' 경로는 타지
+  # 않은 것이다. SnipKey 결함이 아니라 클릭 좌표가 창 밖으로 나간 설정 문제이므로 구분해 알린다.
+  local focus_left=0
+  echo "$logged" | grep -q "focus left the original app during settle" && focus_left=1
+
+  local done_count
+  done_count=$(echo "$logged" | grep -c "inject done" || true)
+
+  # TextEdit으로 돌아와 다음 케이스를 준비한다.
+  new_document >/dev/null 2>&1 || true
+
+  if [[ "$matched" -eq 0 ]]; then
+    fail "$name" "';fill'이 매치되지 않았다 — 발화가 엔진에 도달하지 않았다. 측정을 신뢰할 수 없다. 로그: $(echo "$logged" | tr '\n' ' ')"
+  elif [[ "$done_count" -ne 0 ]]; then
+    fail "$name" "클릭이 있었는데도 주입이 완료됐다 (inject done ${done_count}회) — 백스페이스가 클릭한 자리를 지웠을 것이다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+  elif [[ "$cancelled" -eq 1 ]]; then
+    pass "$name  (같은 앱 클릭이 입력 시계에 잡혀 취소됨, 주입 0회)"
+  elif [[ "$focus_left" -eq 1 ]]; then
+    fail "$name" "클릭이 TextEdit을 벗어나 포커스 가드가 대신 잡았다 — 입력 시계 경로를 검증하지 못했다. 클릭 좌표(창 정중앙)를 확인하라. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+  else
+    fail "$name" "같은 앱을 클릭했는데도 확장이 취소되지 않았다 — 마우스 파괴 경로 재발. 클릭이 입력 시계에 찍히지 않았다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+  fi
+}
+
 run_case_plain_expansion
 run_case_substring_no_expansion
 run_case_word_prefix_no_expansion
@@ -1064,6 +1207,7 @@ run_case_tab_terminator
 run_case_typing_ahead_aborts_expansion
 run_case_fill_in_typing_after_panel_aborts
 run_case_focus_change_during_settle_aborts
+run_case_same_app_click_aborts
 run_case_clipboard_preserved
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────

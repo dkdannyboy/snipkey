@@ -11,12 +11,12 @@ final class ExpansionEngine {
     private var buffer = ""
     private let maxBuffer = 64
 
-    /// 마지막 '진짜' 사용자 키의 이벤트 시각. 첫 백스페이스를 내보내기 직전에 이걸 보고,
-    /// 가드를 무장한 뒤로 키가 들어왔다면 확장을 통째로 버린다.
+    /// 마지막 '진짜' 사용자 입력(키 또는 마우스 클릭)의 이벤트 시각. 첫 백스페이스를
+    /// 내보내기 직전에 이걸 보고, 가드를 무장한 뒤로 입력이 들어왔다면 확장을 통째로 버린다.
     ///
     /// 합성 이벤트(우리가 쏜 백스페이스·⌘V)는 절대 여기 찍히지 않는다. 찍히면 인젝터의
     /// 첫 백스페이스가 바로 그 확장을 스스로 취소해 버린다.
-    private let keyClock = KeystrokeClock()
+    private let inputClock = InputClock()
     /// The open fill-in panel, if any. Typing is ignored while it is on screen.
     /// Deriving suspension from the window itself means a panel that closes
     /// unexpectedly can never leave the engine permanently deaf.
@@ -123,6 +123,16 @@ final class ExpansionEngine {
         }
 
         if type == .leftMouseDown || type == .rightMouseDown {
+            // 클릭은 커서를 옮긴다 — 키를 하나도 남기지 않으면서. 매치 이후에 대상 앱
+            // 어딘가를 클릭하면, 뒤이어 나가는 백스페이스가 약어가 아니라 그 클릭한
+            // 자리를 지운다. 같은 앱이라 PID 검사도, '무장 이후 키 입력' 검사도 통과하므로
+            // 클릭까지 입력 시계에 찍어야 그 확장이 취소된다.
+            //
+            // 키와 똑같이 '이벤트 시각'을 쓴다(관측 시각이 아니라). 필인 패널을 닫는
+            // 순간 이 무장이 걸리는데, 패널 '안'을 클릭했던 이벤트는 그 무장보다 이르므로
+            // 판정에 걸리지 않는다 — 정상 필인은 살아남는다. 우리는 합성 마우스 이벤트를
+            // 아예 쏘지 않으므로 여기 오는 클릭은 전부 진짜 사용자 입력이다.
+            inputClock.mark(at: InputClock.seconds(sinceBootNanos: event.timestamp))
             buffer = ""
             return
         }
@@ -144,7 +154,7 @@ final class ExpansionEngine {
         // 반드시 '이벤트 시각'을 넘긴다 — 우리가 이 콜백에서 관측한 시각이 아니라.
         // 관측 시각을 쓰면 필인 패널을 닫는 Return이 무장보다 늦게 기록될 수 있고,
         // 그러면 멀쩡한 필인 확장이 스스로 취소된다.
-        keyClock.mark(at: KeystrokeClock.seconds(sinceBootNanos: event.timestamp))
+        inputClock.mark(at: InputClock.seconds(sinceBootNanos: event.timestamp))
 
         guard !isSuspended, store.settings.expansionEnabled else {
             buffer = ""
@@ -194,8 +204,8 @@ final class ExpansionEngine {
             Log.write("matched '\(match.snippet.abbreviation)'")
             buffer = ""
             // 지금 무장한다. 방금 친 종결자의 이벤트 시각은 이 시점보다 이르므로 판정에
-            // 걸리지 않고, 이 뒤로 도착하는 키는 전부 확장을 취소시킨다.
-            let quiescence = keyClock.arm()
+            // 걸리지 않고, 이 뒤로 도착하는 입력(키·클릭)은 전부 확장을 취소시킨다.
+            let quiescence = inputClock.arm()
             DispatchQueue.main.async { [weak self] in
                 self?.expand(match, quiescence: quiescence)
             }
@@ -291,8 +301,8 @@ final class ExpansionEngine {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + TextInjector.quiescenceSettle) { [weak self] in
             guard let self else { return }
-            if case .abort = self.keyClock.decide(quiescence) {
-                Log.write("expansion cancelled — user kept typing after the match — fill-in panel not shown")
+            if case .abort = self.inputClock.decide(quiescence) {
+                Log.write("expansion cancelled — user input after the match — fill-in panel not shown")
                 return
             }
             show()
@@ -325,7 +335,7 @@ final class ExpansionEngine {
             // 기록하는데, 그 Return은 이 무장보다 먼저 눌렸다. 탭 콜백이 늦게 돌아 나중에
             // 기록되더라도 기록되는 값은 눌린 시각이므로 무장 이전이다. 관측 시각을
             // 기준으로 삼았다면 바로 그 Return이 멀쩡한 확장을 취소시켰을 것이다.
-            let quiescenceAfterPanel = (quiescence == nil) ? nil : self.keyClock.arm()
+            let quiescenceAfterPanel = (quiescence == nil) ? nil : self.inputClock.arm()
 
             // Return focus to the app the user was typing in.
             targetApp?.activate()
@@ -380,7 +390,7 @@ final class ExpansionEngine {
         // (팔레트 확장이 그렇다), 그때 가드를 걸면 정상 확장을 죽이기만 한다.
         let check: (() -> ExpansionDecision)?
         if let quiescence, backspaces > 0 {
-            let clock = keyClock
+            let clock = inputClock
             check = { clock.decide(quiescence) }
         } else {
             check = nil
