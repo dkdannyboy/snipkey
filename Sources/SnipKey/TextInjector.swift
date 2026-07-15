@@ -115,6 +115,7 @@ enum TextInjector {
             // Give the host app a moment to finish processing the trigger key.
             usleep(40_000)
 
+            // 이른 포기. 여기서 이미 앱이 바뀌었으면 정착 시간을 기다릴 이유가 없다.
             if let expectedPID, frontmostPID() != expectedPID {
                 Log.write("expansion cancelled — focus left the original app")
                 return
@@ -124,8 +125,7 @@ enum TextInjector {
             //
             // 확인은 반드시 '여기'여야 한다. 비동기 블록 맨 위에서 한 번 보고 마는 것으로는
             // 부족하다 — 그 아래에 있는 sleep들(정착 40ms, 붙여넣기 전 80ms, …) 동안
-            // 사용자의 다음 글자가 얼마든지 도착할 수 있기 때문이다. frontmostPID()가
-            // 메인 큐를 동기로 기다리는 것도 마찬가지 이유로 이 앞에 둔다.
+            // 사용자의 다음 글자가 얼마든지 도착할 수 있기 때문이다.
             if let quiescence {
                 usleep(useconds_t(quiescenceSettle * 1_000_000))
                 if case .abort = quiescence() {
@@ -134,6 +134,16 @@ enum TextInjector {
                     Log.write("expansion cancelled — user kept typing after the match")
                     return
                 }
+            }
+
+            // 포커스를 다시 본다. 위의 이른 확인은 정착 시간 '앞'에 있어서, 그 120ms
+            // 동안 사용자가 마우스로 다른 앱을 클릭하거나 ⌘Tab을 눌렀다면 놓친다.
+            // 정적 가드는 키만 추적하므로 포커스 변경을 잡아주지 못한다 — 그대로 두면
+            // 백스페이스가 엉뚱한 앱의 글자를 지운다. 되돌릴 수 없는 키가 나가기
+            // 직전이 마지막 확인 지점이어야 한다.
+            if let expectedPID, frontmostPID() != expectedPID {
+                Log.write("expansion cancelled — focus left the original app during settle")
+                return
             }
 
             for _ in 0..<backspaces {
