@@ -114,6 +114,86 @@ final class StoreSyncTests: XCTestCase {
         XCTAssertEqual(try read(file).groups[0].snippets.map(\.abbreviation), [";b"])
     }
 
+    // MARK: - AC-CORE-002 — 깨끗한 상태면 조용히 리로드한다
+
+    /// 미저장 로컬 변경이 없는 store는 외부 변경을 사용자 개입 없이 반영한다.
+    /// 결정 로직(externalChangeDetected)을 직접 부른다 — 벽시계 없이 동기적으로.
+    func testCleanStoreAdoptsExternalChange() throws {
+        let file = scratchPath()
+        try write(StoreData(groups: library("Shared", [
+            Snippet(abbreviation: ";one", content: "1"),
+        ])), to: file)
+        let store = Store(fileURL: file, deviceDefaults: makeDefaults())
+
+        // 외부에서 파일이 교체됐다.
+        try write(StoreData(groups: library("Shared", [
+            Snippet(abbreviation: ";one", content: "1"),
+            Snippet(abbreviation: ";two", content: "2"),
+        ])), to: file)
+
+        store.externalChangeDetected()
+
+        XCTAssertEqual(store.groups[0].snippets.map(\.abbreviation), [";one", ";two"])
+        // 리로드가 되받아쓰기를 유발하면 안 된다 — 저장이 다시 정상으로 풀려 있어야 한다.
+        XCTAssertNil(store.remoteChange)
+    }
+
+    /// 주입된 가짜 watcher가 울리면(REQ-DET-005) 배선을 타고 리로드가 일어난다.
+    func testCleanStoreReloadsWhenInjectedWatcherFires() throws {
+        let file = scratchPath()
+        try write(StoreData(groups: library("Shared", [
+            Snippet(abbreviation: ";one", content: "1"),
+        ])), to: file)
+
+        let fake = FakeWatcher()
+        let store = Store(
+            location: Store.Location(fileURL: file, expectsExistingLibrary: false),
+            deviceDefaults: makeDefaults(),
+            watcherFactory: { _ in fake }
+        )
+        XCTAssertTrue(fake.started, "Store가 watcher를 시작해야 한다")
+
+        try write(StoreData(groups: library("Shared", [
+            Snippet(abbreviation: ";one", content: "1"),
+            Snippet(abbreviation: ";two", content: "2"),
+        ])), to: file)
+
+        fake.fire() // onChange는 메인으로 hop한다
+        drainMainQueueAndDebounce()
+
+        XCTAssertEqual(store.groups[0].snippets.map(\.abbreviation), [";one", ";two"])
+    }
+
+    // MARK: - AC-DIRTY-001 — 리로드가 로컬 편집을 파괴하지 않는다
+
+    /// 원래 버그의 거울상. "외부 변경이면 항상 리로드"라는 순진한 구현은 로컬 미저장
+    /// 편집을 조용히 지운다. 미저장 편집이 있으면 리로드하지 않고 쓰기 선결 조건에 넘긴다.
+    func testDirtyStoreDoesNotReloadAndDefersToWritePrecondition() throws {
+        let file = scratchPath()
+        try write(StoreData(groups: library("Shared", [
+            Snippet(abbreviation: ";one", content: "1"),
+        ])), to: file)
+        let store = Store(fileURL: file, deviceDefaults: makeDefaults())
+
+        // 로컬 미저장 편집 (디바운스 대기 중).
+        store.groups[0].snippets[0].content = "A의 미저장 편집"
+
+        // 그 사이 외부에서 파일이 교체됐다.
+        try write(StoreData(groups: library("Shared", [
+            Snippet(abbreviation: ";one", content: "1"),
+            Snippet(abbreviation: ";two", content: "2"),
+        ])), to: file)
+
+        store.externalChangeDetected()
+
+        // 리로드하지 않았다 — 미저장 편집이 메모리에 그대로다.
+        XCTAssertEqual(store.groups[0].snippets.map(\.abbreviation), [";one"], "리로드가 로컬 편집을 덮으면 안 된다")
+        XCTAssertEqual(store.groups[0].snippets[0].content, "A의 미저장 편집")
+        // 그리고 이후 저장은 사용자에게 넘긴다.
+        XCTAssertEqual(store.saveNow(), .blockedByRemoteChange)
+        XCTAssertEqual(try read(file).groups[0].snippets.map(\.abbreviation), [";one", ";two"], "디스크는 여전히 그쪽 것")
+    }
+
     // MARK: - AC-CORE-006 — 가드가 과잉 차단하지 않는다
 
     /// 항상 거부하도록 고정된 가드는 AC-CORE-001을 통과하면서 앱을 벽돌로 만든다.
@@ -435,4 +515,14 @@ final class StoreSyncTests: XCTestCase {
             "사용자가 명시적으로 버리기로 한 파일은 실제로 비워져야 한다"
         )
     }
+}
+
+/// 테스트가 변경 알림을 결정적으로 흘려보낼 수 있게 하는 가짜 감시자 (REQ-DET-005).
+/// 실제 DispatchSource의 타이밍 의존성 없이 리로드 결정 로직을 검증한다.
+final class FakeWatcher: StoreWatching {
+    var onChange: (() -> Void)?
+    private(set) var started = false
+    func start() { started = true }
+    func stop() { started = false }
+    func fire() { onChange?() }
 }
