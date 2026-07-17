@@ -982,42 +982,62 @@ run_case_focus_change_during_settle_aborts() {
   new_document || { fail "$name" "TextEdit 준비 실패"; return; }
   clear_engine_buffer
 
-  # osascript를 미리 데운다. 첫 호출은 프로세스를 띄우느라 수백 ms가 걸려서,
-  # 타이핑 뒤에 부르면 정착 창(40ms + 120ms)이 이미 닫힌 뒤에나 도착한다.
-  osa 5 -e 'tell application "Finder" to count windows' >/dev/null 2>&1 || true
-
   local mark=$(log_lines)
+  local focus_marker="E2E case j: Finder frontmost observed"
 
-  # 포커스를 뺏는 '시점'이 이 케이스의 전부다. 인젝터 타임라인은 매치 이후:
-  #   +40ms   이른 포커스 확인 (원래 있던 것)
-  #   +160ms  정착 대기가 끝나고, 포커스를 '다시' 확인한 뒤 백스페이스가 나간다
+  # 포커스를 뺏는 '시점'이 이 케이스의 전부다. 일반 경로의 인젝터 타임라인은:
+  #   매치 +40ms   이른 포커스 확인 (원래 있던 것)
+  #   매치 +160ms  정착 대기가 끝나고, 포커스를 '다시' 확인한 뒤 백스페이스가 나간다
   #
-  # 이 두 확인 '사이'(대략 +40~160ms)에 전환이 떨어져야 한다:
+  # 이 두 확인 '사이'에 전환이 떨어져야 한다:
   #   - 너무 이르면 +40ms 확인이 잡아서, 검증하려는 재확인이 코드에 없어도 통과한다.
   #   - 너무 늦으면 재확인도 지나 백스페이스가 나가버린다.
-  # 이 창은 120ms 폭인데, 고정 sleep으로는 타이핑 완료 시각이 흔들려 매번 못 맞춘다.
-  # 실제로 그래서 한 번은 이른 확인이 잡고 한 번은 다 지나가버렸다.
   #
-  # 그래서 시계가 아니라 로그를 기준으로 삼는다. 'matched'가 찍히는 순간이 매치
-  # 시점(+0ms)이다. 이걸 anchor로 삼으면 타이핑 완료 시각의 흔들림과 무관해진다.
+  # 예전 하네스는 로그에서 "matched ';e2e'"를 보고 나서 배경 셸이 osascript를 새로
+  # 띄워 Finder를 activate했다. 로그 폴링(tail+grep)과 프로세스 시작 비용이 이미
+  # 120ms 창보다 커서, 전환이 +160ms 재확인 뒤에 도착하곤 했다. 실패 로그가
+  # "matched → inject start → inject done"뿐이었던 이유다 — 제품 가드가 깨진 게 아니라
+  # 하네스가 자기 시나리오를 만들지 못했다.
   #
-  # 감지 즉시 전환하면 이른 확인(+40ms) 언저리에 걸릴 수 있어 불안정하다. 그래서
-  # 감지 뒤 60ms를 기다렸다가 전환한다. 그러면 activate는 +60ms 이후에 디스패치되어
-  # 이른 확인은 확실히 지나고, Finder가 최전면이 되는 것은 대략 +80~120ms — 재확인
-  # (+160ms) 전이다. 100ms의 여유가 있어 activate 지연을 흡수한다.
-  (
-    for _ in $(seq 1 300); do
-      if tail -n +$(( mark + 1 )) "$LOG" 2>/dev/null | grep -q "matched ';e2e'"; then
-        sleep 0.06
-        osascript -e 'tell application "Finder" to activate' >/dev/null 2>&1
-        break
-      fi
-      sleep 0.005
-    done
-  ) &
-  local switcher=$!
-  type_text ";e2e"
-  wait "$switcher" 2>/dev/null || true
+  # 그래서 (k)와 같은 필인 경로를 쓴다. 패널을 Return으로 닫으면 곧바로 대상 앱으로
+  # 포커스가 돌아가고, 0.25초 뒤 TextInjector가 시작한다. 그 안에서 다시:
+  #   패널 닫힘 +0.29s  이른 포커스 확인
+  #   패널 닫힘 +0.41s  정착 뒤 포커스 재확인
+  # 이 된다. osascript 하나가 "값 입력 → Return → delay 0.32 → Finder activate"를
+  # 연속으로 수행하므로, 창 안에서 새 프로세스를 띄우지 않는다. 0.32초는 이른 확인은
+  # 지나고 재확인 전에는 들어가도록 둔 값이다.
+  #
+  # 이 케이스는 여전히 "during settle" 로그만 통과시킨다. 그냥 "focus left"면 이른
+  # 확인이 대신 잡은 공허한 통과라서 실패로 분리한다.
+  type_text ";fill"
+  if ! wait_for 8 'grep -q "fill panel presented" "$LOG"'; then
+    fail "$name" "필인 패널이 뜨지 않았다 — 이 경로를 측정할 수 없다. 로그: $(log_since "$mark" | tr '\n' ' ')"
+    return
+  fi
+
+  osascript >/dev/null 2>&1 <<EOF || true
+with timeout of 60 seconds
+  tell application "System Events"
+    repeat with c in characters of "VAL"
+      keystroke (c as text)
+      delay 0.05
+    end repeat
+    key code 36
+    delay 0.32
+  end tell
+
+  tell application "Finder" to activate
+  tell application "System Events"
+    repeat 50 times
+      set frontName to name of first process whose frontmost is true
+      if frontName is "Finder" then exit repeat
+      delay 0.01
+    end repeat
+    set frontName to name of first process whose frontmost is true
+  end tell
+  do shell script "printf '%s\\n' " & quoted form of ("$focus_marker: " & frontName) & " >> " & quoted form of "$LOG"
+end timeout
+EOF
   sleep 3
 
   local logged
@@ -1025,7 +1045,7 @@ run_case_focus_change_during_settle_aborts() {
 
   # 판정은 전적으로 엔진 로그다. 백스페이스가 나갔다면 그건 Finder로 갔을 테니
   # 우리 문서를 봐서는 알 수 없다.
-  #   1) "matched ';e2e'"                          : 키가 엔진에 도달했다 (positive control).
+  #   1) "matched ';fill'"                         : 키가 엔진에 도달했고 필인 경로를 탔다.
   #   2) "focus left the original app during settle": 정착 '뒤'의 재확인이 잡았다.
   #   3) "inject done" 0회                          : 되돌릴 수 없는 키가 하나도 나가지 않았다.
   #
@@ -1033,10 +1053,16 @@ run_case_focus_change_during_settle_aborts() {
   # 느슨하게 보면 +40ms의 이른 확인이 잡은 경우까지 통과시켜서, 정작 검증하려는
   # 재확인이 코드에 없어도 초록불이 뜬다. 실제로 그렇게 무의미한 케이스였다.
   local matched=0
-  echo "$logged" | grep -q "matched ';e2e'" && matched=1
+  echo "$logged" | grep -q "matched ';fill'" && matched=1
 
   local focus_cancelled=0
   echo "$logged" | grep -q "focus left the original app during settle" && focus_cancelled=1
+
+  local early_focus_cancelled=0
+  echo "$logged" | grep -q "expansion cancelled — focus left the original app$" && early_focus_cancelled=1
+
+  local finder_observed=0
+  echo "$logged" | grep -q "$focus_marker: Finder" && finder_observed=1
 
   local done_count
   done_count=$(echo "$logged" | grep -c "inject done" || true)
@@ -1045,9 +1071,17 @@ run_case_focus_change_during_settle_aborts() {
   new_document >/dev/null 2>&1 || true
 
   if [[ "$matched" -eq 0 ]]; then
-    fail "$name" "';e2e'가 매치되지 않았다 — 키가 엔진에 도달하지 않았다. 측정을 신뢰할 수 없다. 로그: $(echo "$logged" | tr '\n' ' ')"
+    fail "$name" "';fill'이 매치되지 않았다 — 키가 엔진에 도달하지 않았다. 측정을 신뢰할 수 없다. 로그: $(echo "$logged" | tr '\n' ' ')"
+  elif [[ "$early_focus_cancelled" -eq 1 ]]; then
+    fail "$name" "Finder 전환이 너무 일찍 들어가 이른 포커스 확인이 잡았다 — 정착 뒤 재확인을 검증하지 못했다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled|$focus_marker" | tr '\n' ' ')"
   elif [[ "$focus_cancelled" -eq 0 ]]; then
-    fail "$name" "정착 뒤 포커스 재확인이 잡지 못했다 — 백스페이스가 남의 앱으로 나갈 수 있다. (이른 확인이 대신 잡았다면 전환 타이밍이 너무 이른 것이니 케이스를 고쳐라.) 로그: $(echo "$logged" | grep -E "matched|inject|cancelled" | tr '\n' ' ')"
+    if [[ "$finder_observed" -eq 0 ]]; then
+      fail "$name" "Finder가 최전면이 되는 것을 관측하지 못했다 — 전환 시나리오가 만들어지지 않았다. 제품 회귀와 구분해야 한다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled|$focus_marker" | tr '\n' ' ')"
+    elif [[ "$done_count" -ne 0 ]]; then
+      fail "$name" "Finder 전환은 관측됐지만 정착 뒤 포커스 재확인이 잡지 못했다 — 백스페이스가 남의 앱으로 나갈 수 있다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled|$focus_marker" | tr '\n' ' ')"
+    else
+      fail "$name" "Finder 전환은 관측됐지만 정착 뒤 포커스 재확인 로그도, 주입 완료 로그도 없다 — 측정 상태가 모호하다. 로그: $(echo "$logged" | grep -E "matched|inject|cancelled|$focus_marker" | tr '\n' ' ')"
+    fi
   elif [[ "$done_count" -ne 0 ]]; then
     fail "$name" "포커스가 떠났는데도 주입이 완료됐다 (inject done ${done_count}회). 로그: $(echo "$logged" | grep -E "inject|cancelled" | tr '\n' ' ')"
   else
