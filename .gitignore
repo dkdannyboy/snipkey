@@ -223,6 +223,9 @@ DerivedData/
 # Personal snippet data used for local migration testing — never commit
 import-data/
 
+# TextExpander UI 참고용 스크린샷. 남의 앱 화면이라 배포물에 넣지 않는다.
+reference/
+
 # Local AI tooling config (not part of the open-source project)
 .claude/
 .moai/

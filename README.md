@@ -6,6 +6,8 @@ everyday parts of Keyboard Maestro.
 
 Native Swift, Apple Silicon, no subscription, no account, no network access.
 
+> 한국어 문서: [README.ko.md](README.ko.md)
+
 SnipKey lives in the menu bar (the ⚡ icon) and also keeps a Dock icon. It began
 as a menu-bar-only app, but macOS will not let an accessory app become active,
 so its window opened without keyboard focus — ⌘N went to whatever app was in
@@ -69,6 +71,17 @@ SnipKey to Applications. The disk image is signed and notarized by Apple, so it
 opens without a Gatekeeper warning.
 
 [releases]: https://github.com/dkdannyboy/snipkey/releases
+
+Or with Homebrew:
+
+```bash
+brew tap dkdannyboy/tap
+brew trust dkdannyboy/tap      # Homebrew asks you to vouch for third-party taps
+brew install --cask snipkey
+```
+
+Upgrade later with `brew upgrade --cask snipkey`. Uninstalling leaves your
+snippet library alone; `brew uninstall --zap --cask snipkey` removes that too.
 
 Or build it yourself:
 
@@ -194,8 +207,14 @@ or run:
 | Snippets, macros, settings | `~/Library/Application Support/SnipKey/store.json` |
 | Troubleshooting log | `~/Library/Logs/SnipKey.log` |
 
-`store.json` is plain JSON — back it up, sync it, or edit it by hand. Settings
-also has an **Export snippets…** button.
+`store.json` is plain JSON — back it up or edit it by hand. Settings also has an
+**Export snippets…** button.
+
+> **On using two Macs:** SnipKey has no sync yet. If you put `store.json` in
+> iCloud Drive and run SnipKey on two Macs at once, each app overwrites the whole
+> file from the copy it holds in memory, so one side's changes disappear
+> silently. For now, keep one Mac as the editor and copy the file to the other.
+> Safe sync is being worked on.
 
 If SnipKey ever finds that file but cannot read it — a bad sync, a half-written
 file, a hand edit gone wrong — it does **not** start over on top of it. It keeps
@@ -213,7 +232,11 @@ swift test           # run the unit tests (parser + importer + matcher)
 ./scripts/build-app.sh           # build dist/SnipKey.app
 ./scripts/build-app.sh --install # …and install it to /Applications
 ./scripts/release.sh             # signed + notarized dist/SnipKey-<version>.dmg
+./scripts/e2e.sh                 # end-to-end harness (types real keys; local only)
 ```
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a patch — especially the
+list of behaviours that look like bugs but are deliberate.
 
 The code is split into two targets:
 

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      # The app bundle is assembled here too, because the bundle step has broken
+      # on its own before while `swift build` stayed green. There is no signing
+      # certificate on a runner, so build-app.sh falls back to ad-hoc signing —
+      # fine for a build check, not something you could ship.
+      - name: Assemble app bundle
+        run: ./scripts/build-app.sh
