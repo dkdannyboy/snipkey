@@ -359,6 +359,18 @@ echo "  클립보드 저장됨 ($(wc -c < "$CLIP_BACKUP" | tr -d ' ') bytes)"
 if pgrep -x TextEdit >/dev/null 2>&1; then
   TEXTEDIT_WAS_RUNNING=1
 
+  # 문서를 세기 전에, 이전 실행이 남긴 '우리' 스크래치 문서부터 닫는다.
+  #
+  # 하네스가 강제 종료되면(타임아웃 kill 등) cleanup이 문서를 못 닫은 채 죽고,
+  # macOS 상태 복원이 다음에 TextEdit이 뜰 때 그 문서를 되살린다. 백업 파일이 있던
+  # 임시 폴더는 이미 지워졌으니 modified 상태의 유령으로 남는다. 그걸 아래 가드가
+  # "사용자 문서 1개"로 오인해 이후 모든 실행을 거부한다 — 크래시 한 번이 하네스를
+  # 수동 개입 전까지 영구 차단하는 꼴이다. 실제로 그렇게 당했다.
+  #
+  # 이 이름의 문서는 계약상 하네스 소유다(E2E_DOC_NAME 주석 참조). 사용자 문서일
+  # 수 없으므로 저장 없이 닫아도 파괴하는 것이 없다.
+  osa 8 -e "tell application \"TextEdit\" to close (every document whose name is \"$E2E_DOC_NAME\") saving no" >/dev/null 2>&1 || true
+
   DOC_COUNT=$(osa 8 -e 'tell application "TextEdit" to count documents' 2>/dev/null || echo "unknown")
 
   if [[ "$DOC_COUNT" == "unknown" || -z "$DOC_COUNT" ]]; then
