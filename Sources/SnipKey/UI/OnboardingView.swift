@@ -202,6 +202,8 @@ struct OnboardingView: View {
                 importSummary = "Imported \(result.snippetCount) snippets in \(result.groups.count) groups. Welcome back!"
             case .blockedByLoadFailure:
                 importSummary = "Nothing was imported — SnipKey could not read the snippet library already on this Mac and will not overwrite it. Open Settings to retry that file or start fresh, then import again."
+            case .blockedByRemoteChange, .blockedByUnavailableLibrary, .blockedByNewerSchema:
+                importSummary = "Nothing was imported — SnipKey will not write over the snippet library at its configured location. Quit and reopen SnipKey once the library is available, then import again."
             case .failed(let message):
                 importSummary = "Nothing was imported. Saving failed: \(message)"
             }
@@ -234,6 +236,8 @@ struct OnboardingView: View {
             importSummary = "Added a “Getting Started” group with sample snippets."
         case .blockedByLoadFailure:
             importSummary = "SnipKey could not read the snippet library already on this Mac, so nothing was saved."
+        case .blockedByRemoteChange, .blockedByUnavailableLibrary, .blockedByNewerSchema:
+            importSummary = "SnipKey will not write over the snippet library at its configured location, so nothing was saved."
         case .failed(let message):
             importSummary = "Could not save the sample snippets: \(message)"
         }

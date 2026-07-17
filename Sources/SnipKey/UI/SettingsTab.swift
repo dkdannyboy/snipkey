@@ -157,6 +157,12 @@ struct SettingsTab: View {
                 importMessage = msg
             case .blockedByLoadFailure:
                 importMessage = "Nothing was imported. SnipKey cannot read your existing snippet library and will not overwrite it — resolve that above first."
+            case .blockedByRemoteChange:
+                importMessage = "Nothing was imported. Your snippet library was changed by another Mac since SnipKey read it, and importing would overwrite that change. Quit and reopen SnipKey to pick up the newer library first."
+            case .blockedByUnavailableLibrary:
+                importMessage = "Nothing was imported. SnipKey cannot find your snippet library at its configured location — it may still be downloading, or its volume may be unmounted."
+            case .blockedByNewerSchema:
+                importMessage = "Nothing was imported. Your snippet library was written by a newer version of SnipKey, and this version would silently drop what it does not understand. Update SnipKey first."
             case .failed(let message):
                 importMessage = "Nothing was imported. Saving failed: \(message)"
             }

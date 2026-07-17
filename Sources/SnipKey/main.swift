@@ -48,6 +48,16 @@ if let flagIndex = arguments.firstIndex(of: "--import-te") {
             """.utf8))
             exit(1)
 
+        case .blockedByRemoteChange, .blockedByUnavailableLibrary, .blockedByNewerSchema:
+            FileHandle.standardError.write(Data("""
+            Import aborted: SnipKey will not write over the snippet library at its configured
+            location, so nothing was written. It may still be downloading, its volume may be
+            unmounted, or another Mac may have changed it. Nothing was lost — try again once
+            the library is available.
+
+            """.utf8))
+            exit(1)
+
         case .failed(let message):
             FileHandle.standardError.write(Data("Import failed while saving: \(message)\n".utf8))
             exit(1)

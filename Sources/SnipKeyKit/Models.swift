@@ -115,6 +115,9 @@ public struct HotkeyMacro: Codable, Identifiable, Hashable {
 public struct AppSettings: Codable, Hashable {
     public var expansionEnabled: Bool
     public var playSoundOnExpand: Bool
+    /// **이 빌드는 이 값을 읽지 않는다** — 온보딩 완료 여부는 `Store.didFinishOnboarding`,
+    /// 즉 UserDefaults에 있다. 접근성 권한이 Mac마다 따로 승인되므로 두 번째 Mac에서는
+    /// 온보딩이 다시 떠야 한다. 키는 pre-2.0 빌드와의 호환을 위해 남긴다.
     public var didFinishOnboarding: Bool
     /// Seconds to wait before restoring the clipboard after a paste-expansion.
     public var clipboardRestoreDelay: Double
@@ -161,15 +164,25 @@ public struct AppSettings: Codable, Hashable {
 // MARK: - Persisted document
 
 public struct StoreData: Codable {
+    /// 이 빌드가 이해하는 최상위 스키마 버전. 이보다 높은 파일은 다른(더 새로운)
+    /// Mac이 쓴 것이므로 건드리지 않는다 — `Store.init`의 버전 검사 참조.
+    public static let currentVersion = 2
+
     public var version: Int
     public var groups: [SnippetGroup]
     public var macros: [HotkeyMacro]
     public var settings: AppSettings
-    /// Lifetime count of expansions, for the fun statistic.
+    /// **이 빌드는 이 값을 읽지 않는다.** 확장 통계는 Mac마다 따로 세므로
+    /// UserDefaults에 있다. 그런데도 계속 써 넣는 이유는 하나다: pre-2.0 빌드의
+    /// `StoreData`는 합성 Codable에 비옵셔널 `expansionCount`라서, 이 키를 빼면
+    /// 구버전 앱이 **라이브러리 전체를** 디코드하지 못한다. 동기화되는 파일은 서로
+    /// 다른 앱 버전의 두 Mac이 함께 만지므로, 그쪽 Mac이 통째로 loadFailure에
+    /// 빠진다. 값은 무의미하고 Mac 사이에서 오락가락해도 무해하다.
+    /// pre-2.0 빌드가 사라지면 지워도 된다.
     public var expansionCount: Int
 
     public init(
-        version: Int = 1,
+        version: Int = StoreData.currentVersion,
         groups: [SnippetGroup] = [],
         macros: [HotkeyMacro] = [],
         settings: AppSettings = AppSettings(),
@@ -180,5 +193,21 @@ public struct StoreData: Codable {
         self.macros = macros
         self.settings = settings
         self.expansionCount = expansionCount
+    }
+
+    /// 관용적 디코더. `AppSettings.init(from:)`이 이미 같은 이유로 같은 모양을
+    /// 하고 있다 — 키 하나가 없다고 사용자의 라이브러리 전체를 못 읽는 것보다는
+    /// 기본값으로 물러나는 편이 낫다. 동기화 파일에서는 이게 더 절실하다:
+    /// 두 Mac의 앱 버전이 다르면 스키마가 갈라지는 게 정상이기 때문이다.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = StoreData()
+        // 버전 키가 아예 없는 파일은 버전 필드가 생기기 전의 것이다. 그걸
+        // currentVersion으로 읽으면 옛 파일이 최신인 척하게 되므로 1로 본다.
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        groups = try c.decodeIfPresent([SnippetGroup].self, forKey: .groups) ?? defaults.groups
+        macros = try c.decodeIfPresent([HotkeyMacro].self, forKey: .macros) ?? defaults.macros
+        settings = try c.decodeIfPresent(AppSettings.self, forKey: .settings) ?? defaults.settings
+        expansionCount = try c.decodeIfPresent(Int.self, forKey: .expansionCount) ?? defaults.expansionCount
     }
 }

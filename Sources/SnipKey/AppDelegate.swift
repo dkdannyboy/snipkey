@@ -26,7 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onInlineSearch = { [weak self] in self?.showInlineSearch() }
         hotkeys.registerAll()
 
-        if !store.settings.didFinishOnboarding {
+        // 온보딩 완료 여부는 장치-로컬이다 — 접근성 권한이 Mac마다 따로 승인되므로,
+        // 라이브러리를 물려받은 두 번째 Mac에서도 온보딩은 다시 돌아야 한다.
+        if !store.didFinishOnboarding {
             showOnboarding()
         }
 
@@ -115,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let view = OnboardingView(
                 onFinished: { [weak self] in
                     guard let self else { return }
-                    self.store.settings.didFinishOnboarding = true
+                    self.store.didFinishOnboarding = true
                     self.engine.startIfPossible()
                     self.onboardingWindow?.close()
                     self.showManager()
