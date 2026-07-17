@@ -108,8 +108,16 @@ cleanup() {
     kill "$SNIPKEY_PID" 2>/dev/null
     wait "$SNIPKEY_PID" 2>/dev/null
   fi
-  pkill -f "SnipKey.app/Contents/MacOS/SnipKey" 2>/dev/null
-  sleep 1
+  # 이 broad pkill은 하네스가 실제로 SnipKey를 소유했을 때만 쏜다. 그러지 않으면
+  # preflight가 거부한 경로(문서 열림·비텍스트 클립보드 등)에서 -f 패턴이 사용자의
+  # 진짜 SnipKey까지 잡아 죽인다 — 그 경로에선 SNIPKEY_WAS_RUNNING을 세운 적이 없어
+  # 아래 재실행 블록이 되살리지도 않는다. 사용자 앱을 죽인 채 방치하는 꼴이다.
+  # SNIPKEY_PID가 있으면 하네스가 자기 것을 띄웠다는 뜻이고, WAS_RUNNING=1이면
+  # 사용자 것을 죽이고 되살릴 책임을 진 상태다 — 둘 중 하나일 때만 stray를 정리한다.
+  if [[ -n "$SNIPKEY_PID" || "$SNIPKEY_WAS_RUNNING" == "1" ]]; then
+    pkill -f "SnipKey.app/Contents/MacOS/SnipKey" 2>/dev/null
+    sleep 1
+  fi
 
   # 클립보드 복원. 클립보드 손실은 출시된 적 있는 버그다 — 하네스가 그걸 재현하면 안 된다.
   # 백업이 비어 있으면 복원하지 않는다. 빈 파일을 pbcopy 하면 되살리는 게 아니라
@@ -123,9 +131,20 @@ cleanup() {
   echo "  임시 저장소 삭제됨: $TMP_DIR"
 
   # 원래 돌고 있던 사용자의 SnipKey를 되살린다 (진짜 store.json으로).
+  #
+  # `open`은 비동기다. 프로세스가 실제로 뜰 때까지 기다리지 않고 끝내면, 곧바로
+  # 이어지는 다음 실행의 preflight `pgrep`이 아직 안 뜬 프로세스를 놓쳐
+  # SNIPKEY_WAS_RUNNING=0으로 판단한다. 그러면 그 실행은 사용자의 SnipKey를 죽이기만
+  # 하고 되살리지 않아 앱이 죽은 채 남는다. 더 나쁘게는, 뒤늦게 뜬 인스턴스가 진짜
+  # store.json을 물고 키를 가로채 그 실행의 측정을 오염시킨다. 그래서 프로세스가
+  # 올라온 것을 확인하고서야 종료한다 — 그러면 다음 preflight가 반드시 보게 된다.
   if [[ "$SNIPKEY_WAS_RUNNING" == "1" ]]; then
     open "$APP" 2>/dev/null
-    echo "  사용자의 SnipKey 재실행됨"
+    if wait_for 10 'pgrep -f "SnipKey.app/Contents/MacOS/SnipKey"'; then
+      echo "  사용자의 SnipKey 재실행됨"
+    else
+      echo "  경고: 사용자의 SnipKey가 되살아나지 않았다 — 직접 실행해라"
+    fi
   fi
 
   exit $code
