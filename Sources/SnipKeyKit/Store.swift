@@ -806,10 +806,33 @@ public final class Store: ObservableObject {
     @discardableResult
     public func saveSnippetsAs(toDirectory directory: URL) -> RelocationResult {
         let target = directory.appendingPathComponent(Self.syncedFileName)
+        // 대상에 이미 파일이 있으면, **검증된 백업**이 있기 전에는 절대 덮지 않는다.
+        // 예전에는 백업 성공 여부를 확인하지 않고 곧장 raw.write로 덮었다: 대상을
+        // 읽지 못하거나(권한, 아직 실체화 안 된 iCloud 자리표시자) 백업 쓰기가
+        // 실패하면, 남의 331개 동기화 라이브러리가 로컬 스냅샷으로 회수 불가능하게
+        // 파괴됐다. 이 저장소의 규칙(읽지 못했거나 안전히 보존하지 못한 파일은
+        // 덮지 않는다)이 위치 전환 계층에서 뚫려 있던 구멍이다.
         var backup: URL?
-        if FileManager.default.fileExists(atPath: target.path),
-           let existing = try? Self.coordinatedRead(target), !existing.isEmpty {
-            backup = Self.writeBackup(existing, into: backupDirectory, tag: "pre-save-as")
+        if FileManager.default.fileExists(atPath: target.path) {
+            guard let existing = try? Self.coordinatedRead(target) else {
+                // 대상을 읽지 못하면 백업 자체가 불가능하다. 덮으면 무엇을 파괴하는지도
+                // 모른 채 파괴하는 셈이므로, 포인터·대상 모두 손대지 않고 중단한다.
+                return RelocationResult(
+                    success: false, backupURL: nil,
+                    message: "대상 파일을 읽지 못해 백업할 수 없습니다. 기존 라이브러리를 덮지 않고 중단합니다.",
+                    activeLocation: fileURL)
+            }
+            if !existing.isEmpty {
+                // 비어 있지 않은 대상을 덮으려면, 디스크에 실제로 놓인 백업이 있어야만 한다.
+                guard let made = Self.writeBackup(existing, into: backupDirectory, tag: "pre-save-as"),
+                      FileManager.default.fileExists(atPath: made.path) else {
+                    return RelocationResult(
+                        success: false, backupURL: nil,
+                        message: "대상 라이브러리를 백업하지 못해 덮어쓰기를 중단합니다.",
+                        activeLocation: fileURL)
+                }
+                backup = made
+            }
         }
         let snap = snapshotFromAnyThread()
         guard let raw = try? JSONEncoder.snipKey.encode(snap) else {
@@ -835,6 +858,25 @@ public final class Store: ObservableObject {
     /// 잘못 억제되기 때문이다 (M1/M2 보고서가 M4 의무로 명시한 항목).
     @discardableResult
     public func linkToSnippets(at target: URL) -> RelocationResult {
+        // 어떤 상태도 건드리기 전에 대상을 먼저 검증한다(preflight). 예전에는 포인터를
+        // 먼저 UserDefaults에 쓰고, 온보딩 플래그를 내린 뒤 relocate했다: 대상이 깨진
+        // JSON·아직 안 받은 자리표시자·신버전 스키마여도 포인터가 이미 박혀, 매
+        // 재실행이 그 나쁜 위치를 다시 열면서 UI는 "그 위치에서 동기화 중"이라 우겼다.
+        // 커밋(포인터 쓰기)을 검증 뒤로 미루면 실패해도 아무 상태가 남지 않는다.
+        let candidate = Location(fileURL: target, expectsExistingLibrary: true)
+        let preflight = Self.loadFrom(candidate)
+        if preflight.loadFailure != nil || preflight.unavailable || preflight.blocked != nil {
+            let reason: String
+            if preflight.blocked == .blockedByNewerSchema {
+                reason = "이 라이브러리는 더 새로운 버전의 SnipKey가 만든 것이라 연결하면 다운그레이드됩니다."
+            } else if preflight.unavailable {
+                reason = "연결하려는 라이브러리를 아직 사용할 수 없습니다 (iCloud 미다운로드 또는 볼륨 없음)."
+            } else {
+                reason = preflight.loadFailure?.message ?? "연결하려는 라이브러리를 읽을 수 없습니다."
+            }
+            return RelocationResult(success: false, backupURL: nil, message: reason, activeLocation: fileURL)
+        }
+
         // 로컬 5개를 먼저 백업한다. relocate가 대상(331개)을 채택하면 인메모리가
         // 교체되므로, 백업은 반드시 그 전에 떠야 한다.
         let localBackup = exportCurrentLibrary(tag: "local-before-link")
@@ -843,8 +885,9 @@ public final class Store: ObservableObject {
         // 실행의 시드 분기가 파일 값(true)으로 덮어쓰지 않아, 온보딩이 다시 뜬다.
         didFinishOnboarding = false
         // relocate는 대상을 **채택만** 한다(우리 것을 쓰지 않는다). 대기 중 저장을
-        // 버리므로 로컬 5개가 331개 위에 실릴 위험도 없다.
-        relocate(to: Location(fileURL: target, expectsExistingLibrary: true))
+        // 버리므로 로컬 5개가 331개 위에 실릴 위험도 없다. preflight에서 이미 한 번
+        // 읽었지만, 채택 시점의 디스크 상태가 진실이므로 relocate가 다시 읽는다.
+        relocate(to: candidate)
         let message = localBackup.map { "이전 로컬 스니펫을 \($0.lastPathComponent)에 백업했습니다." }
         return RelocationResult(success: true, backupURL: localBackup, message: message, activeLocation: fileURL)
     }
@@ -858,11 +901,30 @@ public final class Store: ObservableObject {
            let existing = try? Self.coordinatedRead(localDefaultURL), !existing.isEmpty {
             backup = Self.writeBackup(existing, into: backupDirectory, tag: "pre-stop-sync")
         }
+        // 로컬 사본은 **필수·검증** 작업이다. 예전에는 `try?`로 쓰고 결과를 무시한 채
+        // 곧장 포인터를 지우고 성공을 반환했다: 쓰기가 실패하면(디스크 가득참, 권한,
+        // 잠긴 디렉터리) 동기화 파일을 버리고 빈 로컬 기본(expectsExistingLibrary:false라
+        // 파일 부재 = 빈 첫 실행 라이브러리)을 가리키면서 "동기화를 껐다"고 거짓
+        // 보고했다. 사용자를 빈 로컬에 좌초시키는 침묵의 성공이다.
         let snap = snapshotFromAnyThread()
-        if let raw = try? JSONEncoder.snipKey.encode(snap) {
-            try? FileManager.default.createDirectory(
+        guard let raw = try? JSONEncoder.snipKey.encode(snap) else {
+            return RelocationResult(success: false, backupURL: backup,
+                                    message: "라이브러리를 인코딩하지 못했습니다.", activeLocation: fileURL)
+        }
+        do {
+            try FileManager.default.createDirectory(
                 at: localDefaultURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? raw.write(to: localDefaultURL, options: .atomic)
+            try raw.write(to: localDefaultURL, options: .atomic)
+        } catch {
+            return RelocationResult(success: false, backupURL: backup,
+                                    message: error.localizedDescription, activeLocation: fileURL)
+        }
+        // 파일이 실제로 다시 읽히는지까지 확인한 뒤에만 포인터를 지우고 재배치한다.
+        // 쓰기가 성공을 보고해도 실체가 없을 수 있으므로, 회수 가능한 사본이 있음을
+        // 눈으로 확인하기 전에는 동기화 파일을 놓지 않는다.
+        guard let written = try? Self.coordinatedRead(localDefaultURL), !written.isEmpty else {
+            return RelocationResult(success: false, backupURL: backup,
+                                    message: "로컬 사본을 다시 읽지 못해 동기화를 유지합니다.", activeLocation: fileURL)
         }
         deviceDefaults.removeObject(forKey: DeviceStateKey.storeLocationPath)
         relocate(to: Location(fileURL: localDefaultURL, expectsExistingLibrary: false))

@@ -301,4 +301,162 @@ final class StoreRelocationTests: XCTestCase {
         XCTAssertEqual(store.groups[0].snippets.map(\.abbreviation), [";one", ";two"])
         XCTAssertNil(store.remoteChange)
     }
+
+    // MARK: - 커밋-전-검증 구멍 (Codex adversarial review)
+
+    /// 결함 #1 — "Save Snippets As…"가 백업을 못 뜨면 기존 대상을 덮으면 안 된다.
+    /// 예전 코드는 백업 성공 여부를 확인하지 않고 곧장 대상을 덮었다. 대상이 이미
+    /// 남의 동기화 라이브러리(331개)를 담고 있고 백업이 실패하면, 그 라이브러리가
+    /// 로컬 스냅샷으로 회수 불가능하게 파괴됐다. 백업 디렉터리를 쓰기 불가로 만들어
+    /// writeBackup을 nil로 되돌린 채, 대상이 그대로 남는지 확인한다.
+    func testSaveSnippetsAsRefusesToOverwriteExistingTargetWhenBackupFails() throws {
+        try XCTSkipIf(getuid() == 0, "root는 권한을 무시하고 써서 백업 실패를 만들 수 없다")
+
+        let localDir = try makeDir("local")
+        let localFile = localDir.appendingPathComponent("store.json")
+        try write(StoreData(groups: library("Local", count: 5)), to: localFile)
+
+        // 백업(=지원) 디렉터리를 쓰기 불가로 만든다 → writeBackup이 nil을 돌려준다.
+        let supportDir = try makeDir("support")
+
+        let defaults = makeDefaults()
+        let store = Store(
+            location: Store.Location(fileURL: localFile, expectsExistingLibrary: false),
+            deviceDefaults: defaults,
+            localSupportDirectory: supportDir
+        )
+        XCTAssertEqual(store.allSnippets.count, 5)
+
+        // 대상 폴더에 이미 331개짜리 동기화 라이브러리가 있다.
+        let syncDir = try makeDir("sync")
+        let target = syncDir.appendingPathComponent(Store.syncedFileName)
+        try write(StoreData(groups: library("Existing", count: 331)), to: target)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: supportDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: supportDir.path) }
+
+        let result = store.saveSnippetsAs(toDirectory: syncDir)
+
+        XCTAssertFalse(result.success, "백업을 못 뜨면 기존 대상을 덮지 말고 실패해야 한다")
+        XCTAssertEqual(try snippetCount(target), 331, "기존 동기화 라이브러리가 로컬 5개로 덮이면 안 된다")
+        XCTAssertNil(
+            defaults.string(forKey: Store.DeviceStateKey.storeLocationPath),
+            "실패 시 포인터를 옮기면 안 된다"
+        )
+        XCTAssertEqual(store.activeLocationURL.path, localFile.path, "실패 시 활성 위치가 그대로여야 한다")
+    }
+
+    /// 결함 #2 — "Don't Sync"가 로컬 사본을 못 쓰면 성공을 보고하면 안 된다.
+    /// 예전 코드는 로컬 쓰기를 `try?`로 무시하고 곧장 포인터를 지운 뒤 빈 로컬
+    /// 기본(expectsExistingLibrary:false → 파일 부재 = 빈 첫 실행)을 가리키면서
+    /// "동기화를 껐다"고 거짓 보고했다. 로컬 디렉터리를 쓰기 불가로 만들어 포인터가
+    /// 동기화 경로에 그대로 남는지 확인한다.
+    func testStopSyncingKeepsSyncedPointerWhenLocalWriteFails() throws {
+        try XCTSkipIf(getuid() == 0, "root는 쓰기 권한을 무시해 로컬 쓰기 실패를 만들 수 없다")
+
+        let syncDir = try makeDir("sync")
+        let syncFile = syncDir.appendingPathComponent("shared.json")
+        try write(StoreData(groups: library("Shared", count: 331)), to: syncFile)
+
+        // 로컬 기본/백업 디렉터리를 쓰기 불가로 만들어 로컬 사본 쓰기를 실패시킨다.
+        let supportDir = try makeDir("support")
+
+        let defaults = makeDefaults()
+        defaults.set(syncFile.path, forKey: Store.DeviceStateKey.storeLocationPath)
+
+        let store = Store(
+            location: Store.resolveLocation(environment: [:], defaults: defaults),
+            deviceDefaults: defaults, localSupportDirectory: supportDir
+        )
+        XCTAssertEqual(store.allSnippets.count, 331)
+        XCTAssertTrue(store.isUsingConfiguredLocation)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: supportDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: supportDir.path) }
+
+        let result = store.stopSyncing()
+
+        XCTAssertFalse(result.success, "로컬 사본을 못 쓰면 동기화를 끄지 말고 실패해야 한다")
+        XCTAssertEqual(
+            defaults.string(forKey: Store.DeviceStateKey.storeLocationPath), syncFile.path,
+            "실패 시 포인터가 동기화 경로에 그대로 있어야 한다"
+        )
+        XCTAssertEqual(store.activeLocationURL.path, syncFile.path, "실패 시 활성 위치가 동기화 파일이어야 한다")
+        XCTAssertTrue(store.isUsingConfiguredLocation)
+        XCTAssertEqual(store.allSnippets.count, 331, "인메모리 라이브러리도 그대로여야 한다")
+    }
+
+    /// 결함 #3 공통 소스: 로컬 5개를 담은, 온보딩을 마친 store.
+    private func makeLinkSourceStore() throws -> (store: Store, defaults: UserDefaults, localFile: URL) {
+        let localDir = try makeDir("local")
+        let localFile = localDir.appendingPathComponent("store.json")
+        try write(StoreData(groups: library("Local", count: 5)), to: localFile)
+        let defaults = makeDefaults()
+        let store = Store(
+            location: Store.Location(fileURL: localFile, expectsExistingLibrary: false),
+            deviceDefaults: defaults, localSupportDirectory: localDir
+        )
+        store.didFinishOnboarding = true // 이 Mac에서는 이미 온보딩을 마쳤다.
+        XCTAssertEqual(store.allSnippets.count, 5)
+        return (store, defaults, localFile)
+    }
+
+    /// 결함 #3 공통 검증: 링크가 거부됐고 어떤 상태도 건드리지 않았다.
+    private func assertLinkRefused(
+        _ result: Store.RelocationResult, store: Store, defaults: UserDefaults, localFile: URL
+    ) {
+        XCTAssertFalse(result.success, "나쁜 대상에 연결하면 안 된다")
+        XCTAssertNotNil(result.message, "실패 이유가 사용자에게 표시돼야 한다")
+        XCTAssertNil(
+            defaults.string(forKey: Store.DeviceStateKey.storeLocationPath),
+            "포인터가 설정되면 안 된다 (검증 전에 커밋 금지)"
+        )
+        XCTAssertEqual(store.activeLocationURL.path, localFile.path, "활성 위치가 그대로여야 한다")
+        XCTAssertTrue(store.didFinishOnboarding, "온보딩 플래그가 유지돼야 한다")
+        XCTAssertEqual(store.allSnippets.count, 5, "인메모리 로컬 5개가 그대로여야 한다")
+    }
+
+    /// 결함 #3(a) — 깨진 JSON 대상. 예전 코드는 포인터부터 박고 relocate해서 매
+    /// 재실행이 깨진 위치를 다시 열었다. 검증을 먼저 하면 아무것도 건드리지 않는다.
+    func testLinkRefusesCorruptTargetAndLeavesStateUntouched() throws {
+        let (store, defaults, localFile) = try makeLinkSourceStore()
+
+        let syncDir = try makeDir("sync")
+        let target = syncDir.appendingPathComponent("shared.json")
+        try Data("{ not valid json".utf8).write(to: target)
+
+        let result = store.linkToSnippets(at: target)
+        assertLinkRefused(result, store: store, defaults: defaults, localFile: localFile)
+    }
+
+    /// 결함 #3(b) — 더 새로운 스키마 대상(version > currentVersion). 채택하면 다음
+    /// 저장이 그 필드를 날리는 다운그레이드가 된다. 검증에서 걸러 포인터를 박지 않는다.
+    func testLinkRefusesNewerSchemaTargetAndLeavesStateUntouched() throws {
+        let (store, defaults, localFile) = try makeLinkSourceStore()
+
+        let syncDir = try makeDir("sync")
+        let target = syncDir.appendingPathComponent("shared.json")
+        try write(StoreData(version: 99, groups: library("Shared", count: 331)), to: target)
+
+        let result = store.linkToSnippets(at: target)
+        assertLinkRefused(result, store: store, defaults: defaults, localFile: localFile)
+        XCTAssertEqual(try read(target).version, 99, "신버전 파일은 손대지 않아야 한다")
+    }
+
+    /// 결함 #3(c) — 있어야 할 대상이 아직 없다(iCloud 미다운로드/볼륨 없음).
+    /// 예전 코드는 부재 위치에 포인터를 박아, 재실행이 빈 라이브러리를 사용자의
+    /// 진짜 것인 양 열었다. 검증에서 unavailable을 잡아 포인터를 박지 않는다.
+    func testLinkRefusesUnavailableTargetAndLeavesStateUntouched() throws {
+        let (store, defaults, localFile) = try makeLinkSourceStore()
+
+        let syncDir = try makeDir("sync")
+        let target = syncDir.appendingPathComponent("not-yet-downloaded.json") // 존재하지 않음
+
+        let result = store.linkToSnippets(at: target)
+        assertLinkRefused(result, store: store, defaults: defaults, localFile: localFile)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: target.path),
+            "부재 대상에 파일을 만들면 안 된다"
+        )
+    }
 }
