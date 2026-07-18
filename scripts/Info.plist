@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>SnipKey</string>
 	<key>CFBundleExecutable</key>
 	<string>SnipKey</string>
 	<key>CFBundleIconFile</key>
@@ -14,20 +16,18 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>SnipKey</string>
-	<key>CFBundleDisplayName</key>
-	<string>SnipKey</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Open source under the MIT License</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>SnipKey runs AppleScript actions for your hotkey macros.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Open source under the MIT License</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
