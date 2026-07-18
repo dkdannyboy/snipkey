@@ -459,4 +459,36 @@ final class StoreRelocationTests: XCTestCase {
             "부재 대상에 파일을 만들면 안 된다"
         )
     }
+
+    /// 결함 #3 후속 (Codex adversarial review, TOCTOU) — 대상이 검증 시점엔 멀쩡했다가
+    /// **실제로 적용되는 로드** 시점에 손상되는 경합. 예전 코드는 preflight 읽기 하나로
+    /// 검증하고 곧장 포인터를 박은 뒤, relocate가 두 번째로 읽어 그 결과를 아무도 보지
+    /// 않고 적용했다. 그 사이 대상이 삭제·손상·자리표시자화·신버전 교체되면 나쁜 상태를
+    /// 채택하고도 커밋+성공했다. 커밋을 "실제로 적용된 로드"에 걸어야 이 창이 사라진다.
+    ///
+    /// 손상 시점을 **로컬 백업이 떠진 뒤**로 잡는다: 그 신호가 preflight(백업 전)와
+    /// 적용 읽기(백업 후)를 가르는 의미 경계이고, 수정이 읽기 횟수를 줄여도 견고하다.
+    func testLinkRollsBackWhenTargetGoesBadAtTheAppliedLoad() throws {
+        let (store, defaults, localFile) = try makeLinkSourceStore()
+        let backupDir = localFile.deletingLastPathComponent() // = 주입된 localSupportDirectory
+
+        let syncDir = try makeDir("sync")
+        let target = syncDir.appendingPathComponent("shared.json")
+        try write(StoreData(groups: library("Shared", count: 331)), to: target)
+
+        // 로컬 백업이 떠진 뒤 대상 읽기 직전에 대상을 손상시킨다. preflight 읽기는
+        // 백업 이전이라 멀쩡한 331개를 보고 통과하지만, 적용 로드는 손상본을 만난다.
+        Store._testHookBeforeLoad = { url in
+            guard url.path == target.path else { return }
+            let backupTaken = (try? FileManager.default.contentsOfDirectory(atPath: backupDir.path))?
+                .contains { $0.contains("local-before-link") } ?? false
+            if backupTaken { try? Data("{ corrupted mid-flight".utf8).write(to: url) }
+        }
+        defer { Store._testHookBeforeLoad = nil }
+
+        let result = store.linkToSnippets(at: target)
+
+        // 적용 로드가 나쁘면 전체 롤백 — 아무것도 커밋되지 않는다.
+        assertLinkRefused(result, store: store, defaults: defaults, localFile: localFile)
+    }
 }

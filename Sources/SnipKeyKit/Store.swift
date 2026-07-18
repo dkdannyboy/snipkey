@@ -40,6 +40,18 @@ public final class Store: ObservableObject {
         public let activeLocation: URL
     }
 
+    /// `relocate`가 **실제로 적용한** 로드의 결과. 위치 전환 호출자가 커밋(포인터
+    /// 쓰기/삭제, 성공 반환)을 이 값에 걸도록 노출한다. 예전에는 별도의 preflight
+    /// 읽기로 검증한 뒤 relocate가 두 번째로 읽어 적용했는데, 두 읽기 사이에 대상이
+    /// 바뀌면(TOCTOU) 검증한 것과 적용한 것이 달라 나쁜 상태를 커밋했다. 적용되는
+    /// 로드 하나만을 진실로 삼으면 그 창이 사라진다.
+    public enum RelocationLoad: Equatable {
+        case clean
+        case loadFailure(String)
+        case unavailable
+        case blocked(SaveOutcome)
+    }
+
     /// iCloud가 만든 미해결 충돌 복사본 하나. 앱은 이것을 **보여주기만** 한다 —
     /// 승자를 고르지 않는다 (REQ-CONF-002).
     public struct ConflictVersion: Equatable, Identifiable {
@@ -433,8 +445,15 @@ public final class Store: ObservableObject {
         var fileDidFinishOnboarding: Bool?
     }
 
+    /// 테스트 전용 훅. `loadFrom`가 파일을 읽기 **직전**에 호출된다. 프로덕션에서는
+    /// 항상 nil이라 비용이 없다. 위치 전환의 커밋-전-검증 TOCTOU(검증 읽기와 실제
+    /// 적용 읽기 사이에 대상이 손상/삭제/교체되는 경합)를 결정적으로 재현하는 유일한
+    /// 수단이다 — 두 읽기 사이의 창은 동기 실행이라 테스트 스레드로는 벌릴 수 없다.
+    static var _testHookBeforeLoad: ((URL) -> Void)?
+
     private static func loadFrom(_ location: Location) -> Loaded {
         let fileURL = location.fileURL
+        _testHookBeforeLoad?(fileURL)
         var out = Loaded()
         let emptyContentDigest = contentDigest(groups: [], macros: [], settings: AppSettings())
 
@@ -846,9 +865,19 @@ public final class Store: ObservableObject {
             return RelocationResult(success: false, backupURL: backup,
                                     message: error.localizedDescription, activeLocation: fileURL)
         }
-        deviceDefaults.set(target.path, forKey: DeviceStateKey.storeLocationPath)
-        relocate(to: Location(fileURL: target, expectsExistingLibrary: true))
-        return RelocationResult(success: true, backupURL: backup, message: nil, activeLocation: fileURL)
+        // 우리가 방금 쓴 파일이라 정상 로드돼야 하지만, 그렇지 않으면(쓰기 직후 손상·
+        // 교체·삭제) 커밋한 포인터와 성공 보고로 사용자를 나쁜 위치에 좌초시키지 않는다.
+        // Link와 같은 규칙: 커밋을 relocate가 실제로 적용한 로드에 건다.
+        let oldLocation = Location(fileURL: fileURL, expectsExistingLibrary: expectsExistingLibrary)
+        switch relocate(to: Location(fileURL: target, expectsExistingLibrary: true)) {
+        case .clean:
+            deviceDefaults.set(target.path, forKey: DeviceStateKey.storeLocationPath)
+            return RelocationResult(success: true, backupURL: backup, message: nil, activeLocation: fileURL)
+        default:
+            relocate(to: oldLocation)
+            return RelocationResult(success: false, backupURL: backup,
+                message: "저장한 라이브러리를 다시 읽지 못해 위치를 전환하지 않았습니다.", activeLocation: fileURL)
+        }
     }
 
     /// REQ-LOC-004. 기존 동기화 파일을 가리킨다. 먼저 로컬 라이브러리를 타임스탬프
@@ -858,38 +887,51 @@ public final class Store: ObservableObject {
     /// 잘못 억제되기 때문이다 (M1/M2 보고서가 M4 의무로 명시한 항목).
     @discardableResult
     public func linkToSnippets(at target: URL) -> RelocationResult {
-        // 어떤 상태도 건드리기 전에 대상을 먼저 검증한다(preflight). 예전에는 포인터를
-        // 먼저 UserDefaults에 쓰고, 온보딩 플래그를 내린 뒤 relocate했다: 대상이 깨진
-        // JSON·아직 안 받은 자리표시자·신버전 스키마여도 포인터가 이미 박혀, 매
-        // 재실행이 그 나쁜 위치를 다시 열면서 UI는 "그 위치에서 동기화 중"이라 우겼다.
-        // 커밋(포인터 쓰기)을 검증 뒤로 미루면 실패해도 아무 상태가 남지 않는다.
+        // 롤백 지점을 먼저 잡는다. 대상 채택이 나쁜 로드로 판명되면 여기로 되돌려
+        // 인메모리를 디스크에서 복원한다(로컬 파일은 덮지 않았으므로 그대로 있다).
+        let oldLocation = Location(fileURL: fileURL, expectsExistingLibrary: expectsExistingLibrary)
         let candidate = Location(fileURL: target, expectsExistingLibrary: true)
-        let preflight = Self.loadFrom(candidate)
-        if preflight.loadFailure != nil || preflight.unavailable || preflight.blocked != nil {
-            let reason: String
-            if preflight.blocked == .blockedByNewerSchema {
-                reason = "이 라이브러리는 더 새로운 버전의 SnipKey가 만든 것이라 연결하면 다운그레이드됩니다."
-            } else if preflight.unavailable {
-                reason = "연결하려는 라이브러리를 아직 사용할 수 없습니다 (iCloud 미다운로드 또는 볼륨 없음)."
-            } else {
-                reason = preflight.loadFailure?.message ?? "연결하려는 라이브러리를 읽을 수 없습니다."
-            }
-            return RelocationResult(success: false, backupURL: nil, message: reason, activeLocation: fileURL)
-        }
 
         // 로컬 5개를 먼저 백업한다. relocate가 대상(331개)을 채택하면 인메모리가
         // 교체되므로, 백업은 반드시 그 전에 떠야 한다.
         let localBackup = exportCurrentLibrary(tag: "local-before-link")
-        deviceDefaults.set(target.path, forKey: DeviceStateKey.storeLocationPath)
-        // 온보딩 플래그를 명시적으로 내린다. 이 값이 UserDefaults에 존재하면 다음
-        // 실행의 시드 분기가 파일 값(true)으로 덮어쓰지 않아, 온보딩이 다시 뜬다.
-        didFinishOnboarding = false
-        // relocate는 대상을 **채택만** 한다(우리 것을 쓰지 않는다). 대기 중 저장을
-        // 버리므로 로컬 5개가 331개 위에 실릴 위험도 없다. preflight에서 이미 한 번
-        // 읽었지만, 채택 시점의 디스크 상태가 진실이므로 relocate가 다시 읽는다.
-        relocate(to: candidate)
-        let message = localBackup.map { "이전 로컬 스니펫을 \($0.lastPathComponent)에 백업했습니다." }
-        return RelocationResult(success: true, backupURL: localBackup, message: message, activeLocation: fileURL)
+
+        // **커밋 게이팅**. 포인터 쓰기·온보딩 클리어·성공 반환을 relocate가 **실제로
+        // 적용한 로드**에 건다. 예전에는 별도 preflight 읽기로 검증한 뒤 포인터를 먼저
+        // 박고 relocate가 두 번째로 읽어 그 결과를 무시한 채 적용했다: 두 읽기 사이에
+        // 대상이 삭제·손상·자리표시자화·신버전 교체되면(TOCTOU) 나쁜 상태를 채택하고도
+        // 포인터를 박고 성공을 반환해, 매 재실행이 그 나쁜 위치를 다시 열었다. 적용되는
+        // 로드 하나만을 진실로 삼으면 검증과 커밋이 원자적으로 맞물려 그 창이 사라진다.
+        switch relocate(to: candidate) {
+        case .clean:
+            deviceDefaults.set(target.path, forKey: DeviceStateKey.storeLocationPath)
+            // 온보딩 플래그를 명시적으로 내린다. 이 값이 UserDefaults에 존재하면 다음
+            // 실행의 시드 분기가 파일 값(true)으로 덮어쓰지 않아, 온보딩이 다시 뜬다.
+            didFinishOnboarding = false
+            let message = localBackup.map { "이전 로컬 스니펫을 \($0.lastPathComponent)에 백업했습니다." }
+            return RelocationResult(success: true, backupURL: localBackup, message: message, activeLocation: fileURL)
+        case .loadFailure(let msg):
+            return rollbackRelocation(to: oldLocation, backup: localBackup, reason: msg)
+        case .unavailable:
+            return rollbackRelocation(to: oldLocation, backup: localBackup,
+                reason: "연결하려는 라이브러리를 아직 사용할 수 없습니다 (iCloud 미다운로드 또는 볼륨 없음).")
+        case .blocked(.blockedByNewerSchema):
+            return rollbackRelocation(to: oldLocation, backup: localBackup,
+                reason: "이 라이브러리는 더 새로운 버전의 SnipKey가 만든 것이라 연결하면 다운그레이드됩니다.")
+        case .blocked:
+            return rollbackRelocation(to: oldLocation, backup: localBackup,
+                reason: "연결하려는 라이브러리를 읽을 수 없습니다.")
+        }
+    }
+
+    /// 나쁜 로드를 채택한 뒤 옛 위치로 되돌린다. 대상 파일도 로컬 파일도 덮지
+    /// 않았으므로, 옛 위치를 다시 읽으면 인메모리가 전환 이전 상태로 복원된다.
+    /// 포인터·온보딩은 애초에 이 경로에서 건드리지 않으므로 아무 상태도 커밋되지 않는다.
+    private func rollbackRelocation(
+        to oldLocation: Location, backup: URL?, reason: String
+    ) -> RelocationResult {
+        relocate(to: oldLocation)
+        return RelocationResult(success: false, backupURL: backup, message: reason, activeLocation: fileURL)
     }
 
     /// REQ-LOC-005. 로컬 기본 경로로 돌아간다. 현재 라이브러리를 로컬 기본에 복사하고
@@ -920,22 +962,33 @@ public final class Store: ObservableObject {
                                     message: error.localizedDescription, activeLocation: fileURL)
         }
         // 파일이 실제로 다시 읽히는지까지 확인한 뒤에만 포인터를 지우고 재배치한다.
-        // 쓰기가 성공을 보고해도 실체가 없을 수 있으므로, 회수 가능한 사본이 있음을
-        // 눈으로 확인하기 전에는 동기화 파일을 놓지 않는다.
+        // 로컬 기본은 expectsExistingLibrary:false라 "파일 부재 = 빈 첫 실행"으로
+        // relocate가 clean을 돌려주므로, 방금 쓴 사본이 실제로 비어있지 않게 읽히는지는
+        // 이 명시적 재읽기로만 확인할 수 있다(쓰기 실패로 사라진 사본을 걸러낸다).
         guard let written = try? Self.coordinatedRead(localDefaultURL), !written.isEmpty else {
             return RelocationResult(success: false, backupURL: backup,
                                     message: "로컬 사본을 다시 읽지 못해 동기화를 유지합니다.", activeLocation: fileURL)
         }
-        deviceDefaults.removeObject(forKey: DeviceStateKey.storeLocationPath)
-        relocate(to: Location(fileURL: localDefaultURL, expectsExistingLibrary: false))
-        return RelocationResult(success: true, backupURL: backup, message: nil, activeLocation: fileURL)
+        // 커밋(포인터 삭제 + 성공)을 relocate의 적용 로드에 건다. 재읽기와 relocate 사이에
+        // 사본이 손상되는 경합까지 여기서 닫는다(Link와 동일한 게이팅).
+        let oldLocation = Location(fileURL: fileURL, expectsExistingLibrary: expectsExistingLibrary)
+        switch relocate(to: Location(fileURL: localDefaultURL, expectsExistingLibrary: false)) {
+        case .clean:
+            deviceDefaults.removeObject(forKey: DeviceStateKey.storeLocationPath)
+            return RelocationResult(success: true, backupURL: backup, message: nil, activeLocation: fileURL)
+        default:
+            relocate(to: oldLocation)
+            return RelocationResult(success: false, backupURL: backup,
+                message: "로컬 사본을 채택하지 못해 동기화를 유지합니다.", activeLocation: fileURL)
+        }
     }
 
     /// REQ-LOC-006. 실행 중 위치 변경. Store를 새로 만들지 않고 **제자리에서** 재배치한다
     /// — AppDelegate가 이 Store를 engine/hotkeys/statusBar에 이미 주입했기 때문이다
     /// (`AppDelegate.swift:17-25`). 대기 중 저장을 결정적으로 처리하고, 새 파일을 다시
     /// 읽고, matcher를 재구축하며, 감시자를 새 디렉터리로 재무장한다. 앱 재시작 불필요.
-    public func relocate(to location: Location) {
+    @discardableResult
+    public func relocate(to location: Location) -> RelocationLoad {
         // 대기 중 디바운스 저장을 결정적으로 버린다. 현재 상태는 이동 전에 대상에
         // 이미 반영됐거나(Save As/Don't Sync) 대상을 채택할 것이므로(Link), 옛 경로로의
         // 지연 저장은 무의미하고, Link에서는 그 저장이 남의 파일을 덮을 위험이다.
@@ -951,6 +1004,14 @@ public final class Store: ObservableObject {
 
         watcher = watcherFactory(fileURL.deletingLastPathComponent())
         startWatching()
+
+        // 방금 적용한 로드가 깨끗한지 알린다. 호출자는 이 값에 커밋을 건다.
+        // 순서: loadFailure(메시지 있음) → unavailable → blocked. unavailable도
+        // blocked를 세우므로 unavailable을 먼저 본다.
+        if let lf = loaded.loadFailure { return .loadFailure(lf.message) }
+        if loaded.unavailable { return .unavailable }
+        if let blocked = loaded.blocked { return .blocked(blocked) }
+        return .clean
     }
 
     /// 현재 인메모리 라이브러리를 백업 디렉터리(로컬, 동기화 안 됨)에 타임스탬프
