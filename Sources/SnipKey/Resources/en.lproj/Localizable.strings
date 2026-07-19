@@ -94,6 +94,8 @@
 "editor.content" = "Content";
 "editor.dates" = "Created %@ · Modified %@";
 "editor.charCount" = "%d characters";
+"editor.preview.label" = "Preview";
+"editor.preview.help" = "Show what this snippet expands to";
 
 /* MARK: Insert-macro menu labels (the macro syntax itself is never translated) */
 "macro.fillText" = "Fill-in field";

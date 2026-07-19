@@ -93,6 +93,8 @@
 "editor.content" = "内容";
 "editor.dates" = "作成 %@ · 変更 %@";
 "editor.charCount" = "%d文字";
+"editor.preview.label" = "プレビュー";
+"editor.preview.help" = "このスニペットが何に展開されるかをプレビューします";
 
 /* MARK: マクロ挿入メニューのラベル（マクロ構文そのものは翻訳しない） */
 "macro.fillText" = "入力フィールド";

@@ -93,6 +93,8 @@
 "editor.content" = "내용";
 "editor.dates" = "생성 %@ · 수정 %@";
 "editor.charCount" = "%d자";
+"editor.preview.label" = "미리보기";
+"editor.preview.help" = "이 스니펫이 무엇으로 확장되는지 미리 봅니다";
 
 /* MARK: 매크로 삽입 메뉴 레이블 (매크로 구문 자체는 번역하지 않음) */
 "macro.fillText" = "채우기 필드";

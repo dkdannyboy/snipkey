@@ -534,6 +534,9 @@ struct SnippetEditor: View {
     let onChange: (Snippet) -> Void
 
     @FocusState private var abbreviationFocused: Bool
+    // 미리보기 패널은 기본으로 접혀 있다. 눈 아이콘으로 켜면 확장 결과의 모양을
+    // (실제 확장을 트리거하지 않고) 내용 편집기 바로 아래에서 보여 준다.
+    @State private var showPreview = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -586,12 +589,34 @@ struct SnippetEditor: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+
+                Button {
+                    showPreview.toggle()
+                } label: {
+                    Image(systemName: showPreview ? "eye.fill" : "eye")
+                }
+                .buttonStyle(.borderless)
+                .help(loc.s("editor.preview.help"))
             }
 
             Text(loc.s("editor.content")).font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $snippet.content)
                 .font(.system(.body, design: .monospaced))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+
+            if showPreview {
+                // snippet.content를 직접 읽으므로 내용이 바뀌면 자동으로 다시 렌더링된다.
+                // 읽기 전용·선택 가능·스크롤 가능하게 두어 실제 출력처럼 보이게 한다.
+                Text(loc.s("editor.preview.label")).font(.caption).foregroundStyle(.secondary)
+                ScrollView {
+                    Text(MacroPreview.render(snippet.content))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(6)
+                }
+                .frame(minHeight: 80, maxHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            }
 
             HStack {
                 Text(loc.s("editor.dates",
