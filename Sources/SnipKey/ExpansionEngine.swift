@@ -6,6 +6,8 @@ import SnipKeyKit
 /// against the store, and triggers expansion.
 final class ExpansionEngine {
     private let store: Store
+    /// 채우기 패널의 정적 문자열(제목 폴백·버튼·"포함:")을 현지화하기 위해 참조를 들고 있는다.
+    private let loc: LocalizationManager
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var buffer = ""
@@ -28,8 +30,9 @@ final class ExpansionEngine {
 
     var isRunning: Bool { eventTap != nil }
 
-    init(store: Store) {
+    init(store: Store, loc: LocalizationManager) {
         self.store = store
+        self.loc = loc
     }
 
     static var hasAccessibilityPermission: Bool {
@@ -319,7 +322,8 @@ final class ExpansionEngine {
     ) {
         let panel = FillInPanel.present(
             title: snippet.displayTitle,
-            fields: MacroParser.fillFields(in: tokens)
+            fields: MacroParser.fillFields(in: tokens),
+            loc: loc
         ) { [weak self] values in
             guard let self else { return }
             self.activePanel = nil

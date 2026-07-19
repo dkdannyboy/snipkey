@@ -29,6 +29,7 @@ enum FillInPanel {
     static func present(
         title: String,
         fields: [FillField],
+        loc: LocalizationManager,
         completion: @escaping ([Int: String]?) -> Void
     ) -> NSPanel {
         // .nonactivatingPanel lets the panel take keyboard focus even though
@@ -39,7 +40,8 @@ enum FillInPanel {
             backing: .buffered,
             defer: false
         )
-        panel.title = title.isEmpty ? "Fill In" : title
+        // title은 스니펫 제목(사용자 데이터)이라 번역하지 않고, 비었을 때의 폴백만 현지화한다.
+        panel.title = title.isEmpty ? loc.s("fillin.title") : title
         panel.level = .floating
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = false
@@ -57,7 +59,7 @@ enum FillInPanel {
         closeWatcher = watcher
         panel.delegate = watcher
 
-        let view = FillInFormView(fields: fields, onSubmit: { finish($0) }, onCancel: { finish(nil) })
+        let view = FillInFormView(fields: fields, loc: loc, onSubmit: { finish($0) }, onCancel: { finish(nil) })
         panel.contentView = NSHostingView(rootView: view)
         panel.center()
 
@@ -78,6 +80,9 @@ enum FillInPanel {
 
 private struct FillInFormView: View {
     let fields: [FillField]
+    /// 패널은 NSHostingView로 띄우므로 SwiftUI 환경 밖이다. EnvironmentObject 대신
+    /// 값으로 넘겨받는다. 표시 시점에 문자열을 읽으니 즉시-전환에도 문제없다.
+    let loc: LocalizationManager
     let onSubmit: ([Int: String]) -> Void
     let onCancel: () -> Void
 
@@ -106,9 +111,9 @@ private struct FillInFormView: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel", role: .cancel) { onCancel() }
+                Button(loc.s("common.cancel"), role: .cancel) { onCancel() }
                     .keyboardShortcut(.cancelAction)
-                Button("Insert") { onSubmit(values) }
+                Button(loc.s("fillin.insert")) { onSubmit(values) }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }
@@ -158,7 +163,7 @@ private struct FillInFormView: View {
                 .labelsHidden()
             }
         case .part:
-            Toggle("Include: \(field.name)", isOn: partBinding(field.id))
+            Toggle(loc.s("fillin.include", field.name), isOn: partBinding(field.id))
         }
     }
 

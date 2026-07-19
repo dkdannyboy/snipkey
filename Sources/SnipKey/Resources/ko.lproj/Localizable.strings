@@ -1,0 +1,272 @@
+/* SnipKey UI 문자열 — 한국어. 키 집합은 en/ja와 완전히 동일해야 한다(테스트가 강제). */
+
+/* MARK: 공통 */
+"common.cancel" = "취소";
+"common.delete" = "삭제";
+"common.rename" = "이름 변경";
+"common.back" = "뒤로";
+"common.clear" = "지우기";
+
+/* MARK: 탭 및 윈도우 */
+"tab.snippets" = "스니펫";
+"tab.settings" = "설정";
+"window.main" = "SnipKey";
+
+/* MARK: 메인 메뉴 */
+"menu.file" = "파일";
+"menu.edit" = "편집";
+"menu.window" = "윈도우";
+"menu.about" = "SnipKey 정보";
+"menu.settings" = "설정…";
+"menu.hide" = "SnipKey 가리기";
+"menu.quit" = "SnipKey 종료";
+"menu.newSnippet" = "새 스니펫";
+"menu.closeWindow" = "윈도우 닫기";
+"menu.undo" = "실행 취소";
+"menu.redo" = "실행 복귀";
+"menu.cut" = "오려두기";
+"menu.copy" = "복사하기";
+"menu.paste" = "붙여넣기";
+"menu.delete" = "삭제";
+"menu.selectAll" = "전체 선택";
+"menu.findSnippet" = "스니펫 찾기";
+"menu.minimize" = "최소화";
+"menu.zoom" = "확대/축소";
+
+/* MARK: 상태 막대 메뉴 */
+"status.expansionOn" = "확장: 켬";
+"status.expansionOff" = "확장: 끔";
+"status.accessibilityNeeded" = "⚠ 손쉬운 사용 권한이 필요합니다…";
+"status.searchSnippets" = "스니펫 검색… (%@)";
+"status.openSnipKey" = "SnipKey 열기…";
+"status.stats" = "스니펫 %d개 · 확장 %d회";
+"status.setupAssistant" = "설정 지원…";
+
+/* MARK: 스니펫 관리자 */
+"snippets.groups.header" = "그룹";
+"snippets.group.disabled.help" = "이 그룹은 비활성 상태입니다 — 소속 스니펫이 확장되지 않습니다";
+"snippets.group.disable" = "그룹 비활성화";
+"snippets.group.enable" = "그룹 활성화";
+"snippets.group.rename" = "이름 변경…";
+"snippets.group.delete" = "그룹 삭제";
+"snippets.group.newDefaultName" = "새 그룹";
+"snippets.group.renameTitle" = "그룹 이름 변경";
+"snippets.group.deleteTitle" = "“%@” 그룹을 삭제할까요?";
+"snippets.group.deleteMessage" = "스니펫 %d개가 삭제됩니다. 되돌릴 수 없습니다.";
+"snippets.newGroup.help" = "새 그룹";
+"snippets.count" = "스니펫 %d개";
+"snippets.duplicate" = "복제";
+"snippets.disable" = "비활성화";
+"snippets.enable" = "활성화";
+"snippets.search.placeholder" = "모든 스니펫 검색";
+"snippets.clearSearch" = "검색 지우기";
+"snippets.empty.noMatch" = "“%@”와(과) 일치하는 스니펫이 없습니다";
+"snippets.empty.groupEmpty" = "이 그룹에는 아직 스니펫이 없습니다";
+"snippets.empty.addOne" = "하나 추가";
+"snippets.new.help" = "새 스니펫 (⌘N)";
+"snippets.delete.help" = "스니펫 삭제";
+"snippets.found" = "%d개 찾음";
+"snippets.sort.help" = "정렬 순서";
+"snippets.row.empty" = "빈 스니펫";
+"snippets.row.noAbbreviation" = "약어 없음";
+"snippets.row.conflict.help" = "다른 스니펫이 이 약어를 사용 중입니다 — 둘 중 하나만 확장됩니다";
+"snippets.row.disabled.help" = "비활성";
+
+/* MARK: 정렬 옵션 */
+"sort.abbreviation" = "약어";
+"sort.label" = "레이블";
+"sort.recentlyModified" = "최근 수정순";
+
+/* MARK: 스니펫 편집기 */
+"editor.empty.title" = "편집할 스니펫을 선택하세요";
+"editor.empty.hint" = "⌘N으로 새로 만들거나, 어디서든 ⌘/로 검색해 확장하세요.";
+"editor.abbreviation.label" = "약어";
+"editor.abbreviation.placeholder" = "예: ;sig";
+"editor.label.label" = "레이블 (선택 사항)";
+"editor.label.placeholder" = "이 스니펫의 용도";
+"editor.conflict.one" = "“%@”은(는) %@에서도 사용됩니다. 둘 중 하나만 확장됩니다.";
+"editor.conflict.many" = "“%@”은(는) 다른 스니펫 %d개에서도 사용됩니다. 그중 하나만 확장됩니다.";
+"editor.enabled" = "활성";
+"editor.caseSensitive" = "대소문자 구분";
+"editor.caseSensitive.help" = "끄면 ;SIG와 ;sig 둘 다 확장됩니다";
+"editor.insertMacro" = "매크로 삽입";
+"editor.content" = "내용";
+"editor.dates" = "생성 %@ · 수정 %@";
+"editor.charCount" = "%d자";
+
+/* MARK: 매크로 삽입 메뉴 레이블 (매크로 구문 자체는 번역하지 않음) */
+"macro.fillText" = "채우기 필드";
+"macro.fillArea" = "여러 줄 채우기";
+"macro.fillPopup" = "팝업 선택";
+"macro.fillPart" = "선택 구간";
+"macro.clipboard" = "클립보드";
+"macro.cursor" = "커서 위치";
+"macro.snippet" = "다른 스니펫";
+"macro.date" = "날짜 (2026-07-13)";
+"macro.time" = "시간 (14:30)";
+"macro.key" = "Enter 입력";
+
+/* MARK: 설정 — 일반 */
+"settings.general.header" = "일반";
+"settings.general.enableExpansion" = "텍스트 확장 사용";
+"settings.general.playSound" = "스니펫이 확장될 때 소리 재생";
+"settings.general.launchAtLogin" = "로그인 시 SnipKey 실행";
+
+/* MARK: 설정 — 언어 */
+"settings.language.header" = "언어";
+"settings.language.systemDefault" = "시스템 기본값";
+
+/* MARK: 설정 — 어디서나 검색 */
+"settings.search.header" = "어디서나 검색";
+"settings.search.enable" = "어디서나 검색 팔레트 사용";
+"settings.search.shortcut" = "단축키";
+"settings.search.help" = "어떤 앱에서 입력하는 중이든 이 단축키를 누르면 약어·레이블·내용으로 스니펫을 검색하고, Return을 눌러 원하는 스니펫을 확장할 수 있습니다. 약어가 기억나지 않을 때 유용합니다.";
+
+/* MARK: 설정 — 권한 */
+"settings.permission.header" = "권한";
+"settings.permission.granted" = "손쉬운 사용 권한이 허용됨";
+"settings.permission.required" = "확장하려면 손쉬운 사용 권한이 필요합니다";
+"settings.permission.openSettings" = "시스템 설정 열기";
+"settings.permission.stale.title" = "SnipKey 업데이트 후 작동이 멈췄나요?";
+"settings.permission.stale.body" = "업데이트로 앱의 서명이 바뀌면 macOS가 예전 스위치를 켜진 것으로 계속 표시하면서도 무시합니다. 오래된 항목을 지운 뒤 시스템 설정에서 SnipKey를 다시 켜 주세요.";
+"settings.permission.clearRegrant" = "권한 지우고 다시 허용…";
+
+/* MARK: 설정 — 데이터 */
+"settings.data.header" = "데이터";
+"settings.data.importTE" = "TextExpander에서 가져오기…";
+"settings.data.importFolder" = "폴더에서 가져오기…";
+"settings.data.export" = "스니펫 내보내기…";
+"settings.data.openLog" = "로그 열기";
+
+/* MARK: 설정 — 통계 */
+"settings.stats.header" = "통계";
+"settings.stats.groups" = "그룹";
+"settings.stats.snippets" = "스니펫";
+"settings.stats.expansions" = "전체 확장 횟수";
+
+/* MARK: 설정 — 실패 상태 섹션 헤더 */
+"settings.loadFailure.header" = "스니펫 라이브러리를 열 수 없음";
+"settings.remoteChange.header" = "다른 Mac이 스니펫을 변경함";
+
+/* MARK: 설정 — 동기화 */
+"settings.sync.header" = "동기화";
+"settings.sync.syncingVia" = "동기화 위치";
+"settings.sync.storingLocally" = "로컬에 저장 중";
+"settings.sync.saveAs" = "다른 위치에 스니펫 저장…";
+"settings.sync.link" = "스니펫에 연결…";
+"settings.sync.dontSync" = "동기화 안 함";
+"settings.sync.help" = "클라우드 서비스가 이미 동기화하는 폴더(예: iCloud Drive)를 SnipKey에 지정하세요. SnipKey는 스스로 동기화하지 않습니다 — 위치만 선택하며, 아래에서 파일이 바뀌어도 스니펫을 파괴하지 않습니다.";
+"settings.sync.conflictCopy" = "충돌 복사본";
+"settings.sync.reveal" = "파인더에서 보기";
+"settings.sync.loadVersion" = "이 버전 불러오기";
+"settings.sync.loadedConflict" = "충돌 복사본을 라이브러리에 불러왔습니다.";
+"settings.sync.loadConflictFailed" = "그 충돌 복사본을 불러올 수 없습니다.";
+"settings.sync.savePanel.prompt" = "여기에 저장";
+"settings.sync.savePanel.message" = "클라우드 서비스가 동기화하는 폴더(예: iCloud Drive 내 폴더)를 선택하세요.";
+"settings.sync.savedMessage" = "스니펫 %d개를 %@에 저장했습니다. 이제 SnipKey는 그곳에서 동기화하며, 이전 로컬 복사본은 그대로 둡니다.";
+"settings.sync.saveFailed" = "그곳에 저장할 수 없습니다: %@.";
+"settings.sync.linkPanel.prompt" = "연결";
+"settings.sync.linkPanel.message" = "동기화 폴더에 있는 기존 SnipKey 스니펫 파일을 선택하세요.";
+"settings.sync.nowSyncing" = "이제 %@에서 동기화합니다.";
+"settings.sync.linkBackup" = " 이전 로컬 스니펫은 %@(으)로 백업되어 복구할 수 있습니다.";
+"settings.sync.stopTitle" = "이 Mac에서 동기화를 중단할까요?";
+"settings.sync.stopMessage" = "SnipKey가 현재 스니펫을 이 Mac으로 다시 복사하고 동기화 파일을 더 이상 따르지 않습니다. 동기화 파일 자체는 다른 Mac을 위해 그대로 남습니다.";
+"settings.sync.stopButton" = "동기화 중단";
+"settings.sync.stoppedMessage" = "동기화를 중단했습니다. 스니펫은 다시 %@에 로컬로 저장되며, 동기화 파일은 그대로 남았습니다.";
+
+/* MARK: 가져오기 결과 */
+"settings.import.notFound" = "일반적인 위치에서 TextExpander 데이터를 찾지 못했습니다. “폴더에서 가져오기…”로 .textexpandersettings 또는 .textexpanderbackup 폴더를 선택하세요.";
+"settings.import.panelMessage" = "TextExpander 데이터 폴더(.textexpandersettings 또는 .textexpanderbackup)를 선택하세요";
+"settings.import.success" = "%3$@에서 스니펫 %1$d개를 그룹 %2$d개로 가져왔습니다.";
+"settings.import.richTextNote" = " 서식 있는 스니펫 %d개는 일반 텍스트로 변환되었습니다.";
+"settings.import.blockedLoadFailure" = "아무것도 가져오지 않았습니다. SnipKey가 기존 스니펫 라이브러리를 읽을 수 없어 덮어쓰지 않습니다 — 위의 문제를 먼저 해결하세요.";
+"settings.import.blockedRemote" = "아무것도 가져오지 않았습니다. SnipKey가 읽은 이후 다른 Mac이 스니펫 라이브러리를 변경했으며, 가져오면 그 변경을 덮어씁니다. SnipKey를 종료 후 다시 열어 최신 라이브러리를 먼저 받으세요.";
+"settings.import.blockedUnavailable" = "아무것도 가져오지 않았습니다. SnipKey가 지정된 위치에서 스니펫 라이브러리를 찾을 수 없습니다 — 아직 다운로드 중이거나 볼륨이 마운트 해제되었을 수 있습니다.";
+"settings.import.blockedNewerSchema" = "아무것도 가져오지 않았습니다. 스니펫 라이브러리가 더 새로운 버전의 SnipKey로 작성되었으며, 이 버전은 이해하지 못하는 내용을 조용히 버립니다. SnipKey를 먼저 업데이트하세요.";
+"settings.import.saveFailed" = "아무것도 가져오지 않았습니다. 저장 실패: %@";
+"settings.import.failed" = "가져오기 실패: %@";
+
+/* MARK: 로드 실패 화면 */
+"loadFailure.title" = "SnipKey가 스니펫 파일을 찾았지만 읽을 수 없어 빈 라이브러리를 표시하고 있습니다.";
+"loadFailure.subtitle" = "아무것도 덮어쓰지 않았습니다 — 어떻게 할지 선택하기 전까지 SnipKey는 저장하지 않습니다.";
+"loadFailure.backup" = "복사본을 %@에 보관했습니다.";
+"loadFailure.showFile" = "파일 보기";
+"loadFailure.tryAgain" = "다시 시도";
+"loadFailure.startFresh" = "새로 시작 (버리기)";
+"loadFailure.confirmTitle" = "빈 스니펫 라이브러리로 시작할까요?";
+"loadFailure.confirmWithBackup" = "읽을 수 없는 파일이 교체됩니다. 복사본은 %@에 남습니다.";
+"loadFailure.confirmNoBackup" = "읽을 수 없는 파일이 교체되며, 백업 복사본을 만들 수 없었습니다.";
+"loadFailure.confirmButton" = "새로 시작";
+
+/* MARK: 원격 변경 화면 */
+"remoteChange.title" = "SnipKey가 읽은 뒤 다른 Mac에서 스니펫 라이브러리가 변경되어 저장이 일시 중지되었습니다.";
+"remoteChange.subtitle" = "잃어버린 것은 없습니다. 어떻게 할지 선택하세요 — 모든 옵션이 두 버전을 디스크에 복구 가능하게 남깁니다.";
+"remoteChange.takeTheirs" = "상대 버전 사용";
+"remoteChange.tookTheirsBackup" = "다른 Mac의 버전을 불러왔습니다. 로컬 편집은 %@(으)로 백업했습니다.";
+"remoteChange.tookTheirs" = "다른 Mac의 버전을 불러왔습니다.";
+"remoteChange.keepMine" = "내 버전 유지";
+"remoteChange.keptMineBackup" = "내 버전을 유지했습니다. 다른 Mac의 버전은 %@(으)로 백업했습니다.";
+"remoteChange.keptMine" = "내 버전을 유지했습니다.";
+"remoteChange.keepBoth" = "둘 다 유지";
+"remoteChange.keptBothBackup" = "내 버전을 %@에 기록하고 다른 Mac의 버전을 불러왔습니다.";
+"remoteChange.keptBoth" = "두 버전을 모두 유지했습니다.";
+
+/* MARK: 온보딩 */
+"onboarding.continue" = "계속";
+"onboarding.start" = "SnipKey 시작하기";
+"onboarding.welcome.title" = "SnipKey에 오신 것을 환영합니다";
+"onboarding.welcome.subtitle" = "어디서든 짧은 약어를 입력하면 — SnipKey가 즉시 전체 텍스트로 바꿔 줍니다.";
+"onboarding.feature.expansion.title" = "모든 앱에서 텍스트 확장";
+"onboarding.feature.expansion.detail" = ";sig 같은 약어가 입력하는 대로 전체 스니펫이 됩니다.";
+"onboarding.feature.migration.title" = "TextExpander 이전";
+"onboarding.feature.migration.detail" = "기존 그룹과 약어를 한 번의 클릭으로 가져오세요.";
+"onboarding.feature.fillin.title" = "채우기 양식";
+"onboarding.feature.fillin.detail" = "스니펫이 잠시 멈춰 이름·금액·선택지를 물어볼 수 있습니다.";
+"onboarding.permission.title" = "손쉬운 사용 권한";
+"onboarding.permission.body" = "SnipKey가 입력 내용을 감지하고 스니펫을 삽입하려면 macOS 손쉬운 사용 권한이 필요합니다. 입력하는 내용은 Mac을 절대 벗어나지 않습니다 — SnipKey에는 네트워크 기능이 전혀 없습니다.";
+"onboarding.permission.granted" = "권한이 허용되었습니다 — 준비 완료입니다!";
+"onboarding.permission.grant" = "시스템 설정에서 권한 허용";
+"onboarding.permission.instructions" = "시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용 → SnipKey 켜기.\n권한이 허용되면 이 페이지가 자동으로 갱신됩니다.";
+"onboarding.permission.clearRetry" = "켜져 있는데 작동하지 않나요? 지우고 다시 시도하세요";
+"onboarding.data.title" = "내 스니펫";
+"onboarding.data.subtitle" = "TextExpander에서 오셨나요? 모두 그대로 가져오세요.\n처음이신가요? 가지고 놀 수 있는 샘플 스니펫 몇 개를 추가해 드립니다.";
+"onboarding.data.importTE" = "TextExpander에서 가져오기";
+"onboarding.data.found" = "발견됨: %@";
+"onboarding.data.chooseFolder" = "TextExpander 폴더 선택…";
+"onboarding.data.startFresh" = "샘플 스니펫으로 새로 시작";
+"onboarding.data.panelMessage" = ".textexpandersettings 또는 .textexpanderbackup 폴더를 선택하세요";
+"onboarding.import.success" = "스니펫 %d개를 그룹 %d개로 가져왔습니다. 다시 오신 걸 환영합니다!";
+"onboarding.import.blockedLoadFailure" = "아무것도 가져오지 않았습니다 — SnipKey가 이 Mac에 이미 있는 스니펫 라이브러리를 읽을 수 없어 덮어쓰지 않습니다. 설정을 열어 그 파일을 다시 시도하거나 새로 시작한 뒤 다시 가져오세요.";
+"onboarding.import.blockedOther" = "아무것도 가져오지 않았습니다 — SnipKey는 지정된 위치의 스니펫 라이브러리를 덮어쓰지 않습니다. 라이브러리가 준비되면 SnipKey를 종료 후 다시 열어 가져오세요.";
+"onboarding.startFresh.readOnly" = "SnipKey가 이 Mac에 이미 있는 스니펫 라이브러리를 읽을 수 없습니다. 스니펫을 추가하기 전에 설정을 열어 그 파일을 다시 시도하거나 버리세요.";
+"onboarding.startFresh.added" = "샘플 스니펫이 담긴 “Getting Started” 그룹을 추가했습니다.";
+"onboarding.startFresh.blockedLoadFailure" = "SnipKey가 이 Mac에 이미 있는 스니펫 라이브러리를 읽을 수 없어 아무것도 저장하지 않았습니다.";
+"onboarding.startFresh.blockedOther" = "SnipKey는 지정된 위치의 스니펫 라이브러리를 덮어쓰지 않으므로 아무것도 저장하지 않았습니다.";
+"onboarding.startFresh.saveFailed" = "샘플 스니펫을 저장할 수 없습니다: %@";
+"onboarding.tryit.title" = "직접 써 보기";
+"onboarding.tryit.body" = "아래 상자에 — 또는 다른 어떤 앱에서든 — 스니펫의 약어를 입력해 보세요. 다 입력하는 순간 확장됩니다.";
+"onboarding.tryit.needPermission" = "먼저 손쉬운 사용 권한(2단계)을 허용한 다음 다시 돌아와 시도하세요.";
+"onboarding.tryit.tips.title" = "간단 팁";
+"onboarding.tryit.tip1" = "• 메뉴 막대의 ⚡ 아이콘으로 스니펫 라이브러리와 설정을 엽니다.";
+"onboarding.tryit.tip2" = "• %filltext:…%가 있는 스니펫은 잠시 멈춰 빈칸을 채우도록 요청합니다.";
+"onboarding.tryit.placeholder" = "여기에 %@ 입력";
+
+/* MARK: 별점 프롬프트 (NSAlert, 표시 시점에 읽음) */
+"star.title" = "SnipKey가 마음에 드시나요?";
+"star.message" = "스니펫을 %d회 확장하셨습니다. SnipKey가 시간을 아껴 준다면 GitHub의 별점이 다른 사람들이 찾는 데 도움이 됩니다.";
+"star.button.star" = "GitHub에서 별점 주기";
+"star.button.later" = "나중에";
+"star.button.never" = "다시 묻지 않기";
+
+/* MARK: 채우기 패널 */
+"fillin.title" = "채우기";
+"fillin.insert" = "삽입";
+"fillin.include" = "포함: %@";
+
+/* MARK: 인라인 검색 팔레트 */
+"search.placeholder" = "약어·레이블·내용으로 스니펫 검색";
+"search.hint.navigate" = "이동";
+"search.hint.expand" = "확장";
+"search.hint.jump" = "바로 가기";
+"search.hint.close" = "닫기";
+"search.count" = "%d / %d개";

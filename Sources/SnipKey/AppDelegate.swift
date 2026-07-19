@@ -5,6 +5,9 @@ import SnipKeyKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = Store()
+    /// 앱 전역에서 공유하는 단 하나의 현지화 관리자. SwiftUI 루트에는 EnvironmentObject로
+    /// 주입하고, AppKit 조각(메인 메뉴·상태바·확장 엔진)에는 참조로 넘긴다.
+    let loc = LocalizationManager()
     private var statusBar: StatusBarController!
     private var engine: ExpansionEngine!
     private var hotkeys: HotkeyManager!
@@ -19,16 +22,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("launched from \(Bundle.main.bundlePath) — accessibility trusted: \(ExpansionEngine.hasAccessibilityPermission)")
-        MainMenu.install()
-        engine = ExpansionEngine(store: store)
+        MainMenu.install(loc: loc)
+        engine = ExpansionEngine(store: store, loc: loc)
         hotkeys = HotkeyManager(store: store)
         statusBar = StatusBarController(
             store: store,
+            loc: loc,
             openManager: { [weak self] in self?.showManager() },
             openOnboarding: { [weak self] in self?.showOnboarding() },
             openSearch: { [weak self] in self?.showInlineSearch() },
             openSettings: { [weak self] in self?.openSettings(nil) }
         )
+
+        // 언어가 바뀌면 AppKit 메인 메뉴를 다시 그린다. SwiftUI는 @Published로 알아서
+        // 갱신되고 상태바 메뉴는 열릴 때마다 새로 만들어지므로, 값 관찰을 하지 않는
+        // 메인 메뉴만 여기서 손으로 다시 세운다.
+        NotificationCenter.default.addObserver(
+            forName: .snipKeyLanguageChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            MainMenu.install(loc: self.loc)
+        }
 
         hotkeys.onInlineSearch = { [weak self] in self?.showInlineSearch() }
         hotkeys.registerAll()
@@ -114,11 +130,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         let alert = NSAlert()
-        alert.messageText = "Enjoying SnipKey?"
-        alert.informativeText = "You've expanded \(expansionCount) snippets. If SnipKey saves you time, a star on GitHub helps others find it."
-        alert.addButton(withTitle: "Star on GitHub")   // 첫 버튼 = 기본(Return)
-        alert.addButton(withTitle: "Later")
-        alert.addButton(withTitle: "Don't ask again")
+        alert.messageText = loc.s("star.title")
+        alert.informativeText = loc.s("star.message", expansionCount)
+        alert.addButton(withTitle: loc.s("star.button.star"))   // 첫 버튼 = 기본(Return)
+        alert.addButton(withTitle: loc.s("star.button.later"))
+        alert.addButton(withTitle: loc.s("star.button.never"))
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
@@ -136,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Windows
 
     func showInlineSearch() {
-        InlineSearchPanel.toggle(store: store) { [weak self] snippet, sourceApp in
+        InlineSearchPanel.toggle(store: store, loc: loc) { [weak self] snippet, sourceApp in
             self?.engine.expandFromSearch(snippet, into: sourceApp)
         }
     }
@@ -145,13 +161,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if managerWindow == nil {
             let view = ManagerView()
                 .environmentObject(store)
+                .environmentObject(loc)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 980, height: 640),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "SnipKey"
+            window.title = loc.s("window.main")
             window.center()
             window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false
@@ -186,13 +203,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             )
             .environmentObject(store)
+            .environmentObject(loc)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Welcome to SnipKey"
+            window.title = loc.s("onboarding.welcome.title")
             window.center()
             window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false

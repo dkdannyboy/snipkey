@@ -27,11 +27,11 @@ enum InlineSearchPanel {
 
     static var isOpen: Bool { panel?.isVisible == true }
 
-    static func toggle(store: Store, onPick: @escaping (Snippet, NSRunningApplication?) -> Void) {
+    static func toggle(store: Store, loc: LocalizationManager, onPick: @escaping (Snippet, NSRunningApplication?) -> Void) {
         if isOpen {
             close()
         } else {
-            open(store: store, onPick: onPick)
+            open(store: store, loc: loc, onPick: onPick)
         }
     }
 
@@ -39,7 +39,7 @@ enum InlineSearchPanel {
         panel?.close()
     }
 
-    private static func open(store: Store, onPick: @escaping (Snippet, NSRunningApplication?) -> Void) {
+    private static func open(store: Store, loc: LocalizationManager, onPick: @escaping (Snippet, NSRunningApplication?) -> Void) {
         // Remember where the user was typing, so the snippet lands back there.
         let sourceApp = NSWorkspace.shared.frontmostApplication
 
@@ -64,7 +64,7 @@ enum InlineSearchPanel {
             onPick(snippet, sourceApp)
         }
 
-        let view = InlineSearchView(store: store, onPick: pick, onCancel: dismiss)
+        let view = InlineSearchView(store: store, loc: loc, onPick: pick, onCancel: dismiss)
         panel.contentView = NSHostingView(rootView: view)
 
         positionNearTop(panel)
@@ -112,6 +112,8 @@ enum InlineSearchPanel {
 
 private struct InlineSearchView: View {
     @ObservedObject var store: Store
+    /// 팔레트도 NSHostingView로 띄우므로 SwiftUI 환경 밖이다. 값으로 넘겨받는다.
+    let loc: LocalizationManager
     let onPick: (Snippet) -> Void
     let onCancel: () -> Void
 
@@ -212,7 +214,7 @@ private struct InlineSearchView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .font(.title3)
-            TextField("Search snippets by abbreviation, label, or content", text: $query)
+            TextField(loc.s("search.placeholder"), text: $query)
                 .textFieldStyle(.plain)
                 .font(.title3)
                 .focused($searchFocused)
@@ -225,7 +227,7 @@ private struct InlineSearchView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Clear")
+                .help(loc.s("common.clear"))
             }
         }
         .padding(.horizontal, 16)
@@ -264,7 +266,7 @@ private struct InlineSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.largeTitle)
                 .foregroundStyle(.tertiary)
-            Text("No snippets match “\(query)”")
+            Text(loc.s("snippets.empty.noMatch", query))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -272,12 +274,12 @@ private struct InlineSearchView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
-            hint("↑↓", "Navigate")
-            hint("↩", "Expand")
-            hint("⌘1–9", "Jump")
-            hint("esc", "Close")
+            hint("↑↓", loc.s("search.hint.navigate"))
+            hint("↩", loc.s("search.hint.expand"))
+            hint("⌘1–9", loc.s("search.hint.jump"))
+            hint("esc", loc.s("search.hint.close"))
             Spacer()
-            Text("\(hits.count) of \(store.allSnippets.count)")
+            Text(loc.s("search.count", hits.count, store.allSnippets.count))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }

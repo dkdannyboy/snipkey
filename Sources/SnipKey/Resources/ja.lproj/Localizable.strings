@@ -1,0 +1,272 @@
+/* SnipKey UI 文字列 — 日本語。キー集合は en/ko と完全に一致させる（テストで強制）。 */
+
+/* MARK: 共通 */
+"common.cancel" = "キャンセル";
+"common.delete" = "削除";
+"common.rename" = "名称変更";
+"common.back" = "戻る";
+"common.clear" = "消去";
+
+/* MARK: タブとウインドウ */
+"tab.snippets" = "スニペット";
+"tab.settings" = "設定";
+"window.main" = "SnipKey";
+
+/* MARK: メインメニュー */
+"menu.file" = "ファイル";
+"menu.edit" = "編集";
+"menu.window" = "ウインドウ";
+"menu.about" = "SnipKeyについて";
+"menu.settings" = "設定…";
+"menu.hide" = "SnipKeyを隠す";
+"menu.quit" = "SnipKeyを終了";
+"menu.newSnippet" = "新規スニペット";
+"menu.closeWindow" = "ウインドウを閉じる";
+"menu.undo" = "取り消す";
+"menu.redo" = "やり直す";
+"menu.cut" = "カット";
+"menu.copy" = "コピー";
+"menu.paste" = "ペースト";
+"menu.delete" = "削除";
+"menu.selectAll" = "すべてを選択";
+"menu.findSnippet" = "スニペットを検索";
+"menu.minimize" = "しまう";
+"menu.zoom" = "拡大/縮小";
+
+/* MARK: ステータスバーメニュー */
+"status.expansionOn" = "展開: オン";
+"status.expansionOff" = "展開: オフ";
+"status.accessibilityNeeded" = "⚠ アクセシビリティのアクセス許可が必要です…";
+"status.searchSnippets" = "スニペットを検索… (%@)";
+"status.openSnipKey" = "SnipKeyを開く…";
+"status.stats" = "スニペット%d個 · 展開%d回";
+"status.setupAssistant" = "設定アシスタント…";
+
+/* MARK: スニペットマネージャ */
+"snippets.groups.header" = "グループ";
+"snippets.group.disabled.help" = "このグループは無効です — 含まれるスニペットは展開されません";
+"snippets.group.disable" = "グループを無効にする";
+"snippets.group.enable" = "グループを有効にする";
+"snippets.group.rename" = "名称変更…";
+"snippets.group.delete" = "グループを削除";
+"snippets.group.newDefaultName" = "新規グループ";
+"snippets.group.renameTitle" = "グループの名称変更";
+"snippets.group.deleteTitle" = "「%@」を削除しますか？";
+"snippets.group.deleteMessage" = "スニペット%d個が削除されます。この操作は取り消せません。";
+"snippets.newGroup.help" = "新規グループ";
+"snippets.count" = "スニペット%d個";
+"snippets.duplicate" = "複製";
+"snippets.disable" = "無効にする";
+"snippets.enable" = "有効にする";
+"snippets.search.placeholder" = "すべてのスニペットを検索";
+"snippets.clearSearch" = "検索を消去";
+"snippets.empty.noMatch" = "「%@」に一致するスニペットはありません";
+"snippets.empty.groupEmpty" = "このグループにはまだスニペットがありません";
+"snippets.empty.addOne" = "追加する";
+"snippets.new.help" = "新規スニペット (⌘N)";
+"snippets.delete.help" = "スニペットを削除";
+"snippets.found" = "%d件見つかりました";
+"snippets.sort.help" = "並べ替え順序";
+"snippets.row.empty" = "空のスニペット";
+"snippets.row.noAbbreviation" = "略語なし";
+"snippets.row.conflict.help" = "別のスニペットがこの略語を使用しています — 展開できるのはどちらか一方だけです";
+"snippets.row.disabled.help" = "無効";
+
+/* MARK: 並べ替えオプション */
+"sort.abbreviation" = "略語";
+"sort.label" = "ラベル";
+"sort.recentlyModified" = "最近変更した順";
+
+/* MARK: スニペットエディタ */
+"editor.empty.title" = "編集するスニペットを選択してください";
+"editor.empty.hint" = "⌘Nで作成するか、どこでも⌘/で検索して展開できます。";
+"editor.abbreviation.label" = "略語";
+"editor.abbreviation.placeholder" = "例: ;sig";
+"editor.label.label" = "ラベル（省略可）";
+"editor.label.placeholder" = "このスニペットの用途";
+"editor.conflict.one" = "「%@」は %@ でも使用されています。展開できるのはどちらか一方だけです。";
+"editor.conflict.many" = "「%@」は他の%d個のスニペットでも使用されています。展開できるのはそのうち1つだけです。";
+"editor.enabled" = "有効";
+"editor.caseSensitive" = "大文字と小文字を区別";
+"editor.caseSensitive.help" = "オフにすると ;SIG と ;sig の両方が展開されます";
+"editor.insertMacro" = "マクロを挿入";
+"editor.content" = "内容";
+"editor.dates" = "作成 %@ · 変更 %@";
+"editor.charCount" = "%d文字";
+
+/* MARK: マクロ挿入メニューのラベル（マクロ構文そのものは翻訳しない） */
+"macro.fillText" = "入力フィールド";
+"macro.fillArea" = "複数行入力";
+"macro.fillPopup" = "ポップアップ選択";
+"macro.fillPart" = "任意セクション";
+"macro.clipboard" = "クリップボード";
+"macro.cursor" = "カーソル位置";
+"macro.snippet" = "別のスニペット";
+"macro.date" = "日付 (2026-07-13)";
+"macro.time" = "時刻 (14:30)";
+"macro.key" = "Enterを押す";
+
+/* MARK: 設定 — 一般 */
+"settings.general.header" = "一般";
+"settings.general.enableExpansion" = "テキスト展開を有効にする";
+"settings.general.playSound" = "スニペット展開時にサウンドを再生";
+"settings.general.launchAtLogin" = "ログイン時にSnipKeyを起動";
+
+/* MARK: 設定 — 言語 */
+"settings.language.header" = "言語";
+"settings.language.systemDefault" = "システムのデフォルト";
+
+/* MARK: 設定 — どこでも検索 */
+"settings.search.header" = "どこでも検索";
+"settings.search.enable" = "どこでも検索パレットを有効にする";
+"settings.search.shortcut" = "ショートカット";
+"settings.search.help" = "どのアプリで入力中でもこれを押すと、略語・ラベル・内容でスニペットを検索し、Returnで目的のものを展開できます。略語を思い出せないときに便利です。";
+
+/* MARK: 設定 — アクセス許可 */
+"settings.permission.header" = "アクセス許可";
+"settings.permission.granted" = "アクセシビリティのアクセスが許可されています";
+"settings.permission.required" = "展開にはアクセシビリティのアクセス許可が必要です";
+"settings.permission.openSettings" = "システム設定を開く";
+"settings.permission.stale.title" = "SnipKeyの更新後に動作しなくなりましたか？";
+"settings.permission.stale.body" = "更新でアプリの署名が変わると、macOSは古いスイッチをオンのまま表示しつつ無視します。古い項目を消去してから、システム設定でSnipKeyを再度オンにしてください。";
+"settings.permission.clearRegrant" = "アクセス許可を消去して再許可…";
+
+/* MARK: 設定 — データ */
+"settings.data.header" = "データ";
+"settings.data.importTE" = "TextExpanderから読み込む…";
+"settings.data.importFolder" = "フォルダから読み込む…";
+"settings.data.export" = "スニペットを書き出す…";
+"settings.data.openLog" = "ログを開く";
+
+/* MARK: 設定 — 統計 */
+"settings.stats.header" = "統計";
+"settings.stats.groups" = "グループ";
+"settings.stats.snippets" = "スニペット";
+"settings.stats.expansions" = "展開回数の合計";
+
+/* MARK: 設定 — 失敗状態のセクションヘッダ */
+"settings.loadFailure.header" = "スニペットライブラリを開けませんでした";
+"settings.remoteChange.header" = "別のMacがスニペットを変更しました";
+
+/* MARK: 設定 — 同期 */
+"settings.sync.header" = "同期";
+"settings.sync.syncingVia" = "同期先";
+"settings.sync.storingLocally" = "ローカルに保存中";
+"settings.sync.saveAs" = "別名でスニペットを保存…";
+"settings.sync.link" = "スニペットにリンク…";
+"settings.sync.dontSync" = "同期しない";
+"settings.sync.help" = "クラウドサービスがすでに同期しているフォルダ（例: iCloud Drive）をSnipKeyに指定してください。SnipKey自体は同期を行いません — 場所を選ぶだけで、下でファイルが変わってもスニペットを破壊しません。";
+"settings.sync.conflictCopy" = "競合コピー";
+"settings.sync.reveal" = "Finderで表示";
+"settings.sync.loadVersion" = "このバージョンを読み込む";
+"settings.sync.loadedConflict" = "競合コピーをライブラリに読み込みました。";
+"settings.sync.loadConflictFailed" = "その競合コピーを読み込めませんでした。";
+"settings.sync.savePanel.prompt" = "ここに保存";
+"settings.sync.savePanel.message" = "クラウドサービスが同期するフォルダ（例: iCloud Drive内のフォルダ）を選択してください。";
+"settings.sync.savedMessage" = "スニペット%d個を%@に保存しました。SnipKeyは以後そこから同期します。以前のローカルコピーはそのまま残ります。";
+"settings.sync.saveFailed" = "そこに保存できませんでした: %@。";
+"settings.sync.linkPanel.prompt" = "リンク";
+"settings.sync.linkPanel.message" = "同期フォルダ内にある既存のSnipKeyスニペットファイルを選択してください。";
+"settings.sync.nowSyncing" = "以後%@から同期します。";
+"settings.sync.linkBackup" = " 以前のローカルスニペットは%@にバックアップされ、復元できます。";
+"settings.sync.stopTitle" = "このMacの同期を停止しますか？";
+"settings.sync.stopMessage" = "SnipKeyは現在のスニペットをこのMacにコピーし直し、同期ファイルの追従を停止します。同期ファイル自体は他のMacのためにそのまま残ります。";
+"settings.sync.stopButton" = "同期を停止";
+"settings.sync.stoppedMessage" = "同期を停止しました。スニペットは再び%@にローカル保存され、同期ファイルはそのまま残りました。";
+
+/* MARK: 読み込み結果 */
+"settings.import.notFound" = "通常の場所にTextExpanderのデータが見つかりませんでした。「フォルダから読み込む…」で .textexpandersettings または .textexpanderbackup フォルダを選択してください。";
+"settings.import.panelMessage" = "TextExpanderのデータフォルダ（.textexpandersettings または .textexpanderbackup）を選択してください";
+"settings.import.success" = "%3$@からスニペット%1$d個をグループ%2$d個として読み込みました。";
+"settings.import.richTextNote" = " 書式付きスニペット%d個はプレーンテキストに変換されました。";
+"settings.import.blockedLoadFailure" = "何も読み込まれませんでした。SnipKeyは既存のスニペットライブラリを読み取れないため上書きしません — まず上の問題を解決してください。";
+"settings.import.blockedRemote" = "何も読み込まれませんでした。SnipKeyが読み取った後に別のMacがスニペットライブラリを変更しており、読み込むとその変更を上書きします。まずSnipKeyを終了して開き直し、新しいライブラリを取得してください。";
+"settings.import.blockedUnavailable" = "何も読み込まれませんでした。SnipKeyは指定された場所にスニペットライブラリを見つけられません — まだダウンロード中か、ボリュームがマウント解除されている可能性があります。";
+"settings.import.blockedNewerSchema" = "何も読み込まれませんでした。スニペットライブラリはより新しいバージョンのSnipKeyで作成されており、このバージョンでは理解できない内容を無言で破棄します。まずSnipKeyを更新してください。";
+"settings.import.saveFailed" = "何も読み込まれませんでした。保存に失敗しました: %@";
+"settings.import.failed" = "読み込みに失敗しました: %@";
+
+/* MARK: 読み込み失敗ビュー */
+"loadFailure.title" = "SnipKeyはスニペットファイルを見つけましたが読み取れなかったため、空のライブラリを表示しています。";
+"loadFailure.subtitle" = "何も上書きされていません — どうするか選ぶまでSnipKeyは保存しません。";
+"loadFailure.backup" = "コピーを%@に保管しました。";
+"loadFailure.showFile" = "ファイルを表示";
+"loadFailure.tryAgain" = "再試行";
+"loadFailure.startFresh" = "最初から始める（破棄）";
+"loadFailure.confirmTitle" = "空のスニペットライブラリで始めますか？";
+"loadFailure.confirmWithBackup" = "読み取れないファイルは置き換えられます。コピーは%@に残ります。";
+"loadFailure.confirmNoBackup" = "読み取れないファイルは置き換えられ、バックアップコピーは作成できませんでした。";
+"loadFailure.confirmButton" = "最初から始める";
+
+/* MARK: リモート変更ビュー */
+"remoteChange.title" = "SnipKeyが読み取った後に別のMacでスニペットライブラリが変更されたため、保存が一時停止しています。";
+"remoteChange.subtitle" = "失われたものはありません。どうするか選択してください — どの選択肢も両方のバージョンをディスク上で復元可能なまま残します。";
+"remoteChange.takeTheirs" = "相手のを使用";
+"remoteChange.tookTheirsBackup" = "別のMacのバージョンを読み込みました。ローカルの編集は%@にバックアップしました。";
+"remoteChange.tookTheirs" = "別のMacのバージョンを読み込みました。";
+"remoteChange.keepMine" = "自分のを保持";
+"remoteChange.keptMineBackup" = "自分のバージョンを保持しました。別のMacのバージョンは%@にバックアップしました。";
+"remoteChange.keptMine" = "自分のバージョンを保持しました。";
+"remoteChange.keepBoth" = "両方を保持";
+"remoteChange.keptBothBackup" = "自分のバージョンを%@に書き込み、別のMacのバージョンを読み込みました。";
+"remoteChange.keptBoth" = "両方のバージョンを保持しました。";
+
+/* MARK: オンボーディング */
+"onboarding.continue" = "続ける";
+"onboarding.start" = "SnipKeyを使い始める";
+"onboarding.welcome.title" = "SnipKeyへようこそ";
+"onboarding.welcome.subtitle" = "どこでも短い略語を入力すると — SnipKeyが即座に全文に置き換えます。";
+"onboarding.feature.expansion.title" = "あらゆるアプリでテキスト展開";
+"onboarding.feature.expansion.detail" = ";sig のような略語が、入力するそばから全文スニペットになります。";
+"onboarding.feature.migration.title" = "TextExpanderからの移行";
+"onboarding.feature.migration.detail" = "既存のグループと略語をワンクリックで読み込みます。";
+"onboarding.feature.fillin.title" = "入力フォーム";
+"onboarding.feature.fillin.detail" = "スニペットが一時停止して、名前・金額・選択肢を尋ねることができます。";
+"onboarding.permission.title" = "アクセシビリティのアクセス許可";
+"onboarding.permission.body" = "SnipKeyが入力内容を検知してスニペットを挿入するには、macOSのアクセシビリティへのアクセスが必要です。入力した内容がMacの外に出ることは決してありません — SnipKeyにはネットワーク機能が一切ありません。";
+"onboarding.permission.granted" = "アクセスが許可されました — 準備完了です！";
+"onboarding.permission.grant" = "システム設定でアクセスを許可";
+"onboarding.permission.instructions" = "システム設定 → プライバシーとセキュリティ → アクセシビリティ → SnipKeyをオンにする。\nアクセスが許可されると、このページは自動的に更新されます。";
+"onboarding.permission.clearRetry" = "オンなのに動きませんか？ 消去してもう一度お試しください";
+"onboarding.data.title" = "あなたのスニペット";
+"onboarding.data.subtitle" = "TextExpanderからの移行ですか？ すべてそのままお持ちください。\n新しく始めますか？ 試せるサンプルスニペットをいくつか追加します。";
+"onboarding.data.importTE" = "TextExpanderから読み込む";
+"onboarding.data.found" = "見つかりました: %@";
+"onboarding.data.chooseFolder" = "TextExpanderフォルダを選択…";
+"onboarding.data.startFresh" = "サンプルスニペットで新しく始める";
+"onboarding.data.panelMessage" = ".textexpandersettings または .textexpanderbackup フォルダを選択してください";
+"onboarding.import.success" = "スニペット%d個をグループ%d個として読み込みました。おかえりなさい！";
+"onboarding.import.blockedLoadFailure" = "何も読み込まれませんでした — SnipKeyはこのMacに既にあるスニペットライブラリを読み取れず、上書きしません。設定を開いてそのファイルを再試行するか、最初から始めてから、もう一度読み込んでください。";
+"onboarding.import.blockedOther" = "何も読み込まれませんでした — SnipKeyは指定された場所のスニペットライブラリを上書きしません。ライブラリが利用可能になったらSnipKeyを終了して開き直し、もう一度読み込んでください。";
+"onboarding.startFresh.readOnly" = "SnipKeyはこのMacに既にあるスニペットライブラリを読み取れませんでした。スニペットを追加する前に、設定を開いてそのファイルを再試行するか破棄してください。";
+"onboarding.startFresh.added" = "サンプルスニペット入りの「Getting Started」グループを追加しました。";
+"onboarding.startFresh.blockedLoadFailure" = "SnipKeyはこのMacに既にあるスニペットライブラリを読み取れなかったため、何も保存されませんでした。";
+"onboarding.startFresh.blockedOther" = "SnipKeyは指定された場所のスニペットライブラリを上書きしないため、何も保存されませんでした。";
+"onboarding.startFresh.saveFailed" = "サンプルスニペットを保存できませんでした: %@";
+"onboarding.tryit.title" = "試してみる";
+"onboarding.tryit.body" = "下のボックスに — または他のどのアプリでも — スニペットの略語を入力してみてください。入力し終えた瞬間に展開されます。";
+"onboarding.tryit.needPermission" = "先にアクセシビリティのアクセス許可（ステップ2）を許可してから、戻って試してください。";
+"onboarding.tryit.tips.title" = "クイックヒント";
+"onboarding.tryit.tip1" = "• メニューバーの⚡アイコンでスニペットライブラリと設定を開きます。";
+"onboarding.tryit.tip2" = "• %filltext:…% を含むスニペットは一時停止し、空欄の入力を求めます。";
+"onboarding.tryit.placeholder" = "ここに %@ を入力";
+
+/* MARK: 星評価プロンプト（NSAlert、表示時点で読み取り） */
+"star.title" = "SnipKeyはお役に立っていますか？";
+"star.message" = "スニペットを%d回展開しました。SnipKeyが時間の節約になっているなら、GitHubでの星が他の人が見つける助けになります。";
+"star.button.star" = "GitHubで星を付ける";
+"star.button.later" = "後で";
+"star.button.never" = "今後表示しない";
+
+/* MARK: 入力パネル */
+"fillin.title" = "入力";
+"fillin.insert" = "挿入";
+"fillin.include" = "含める: %@";
+
+/* MARK: インライン検索パレット */
+"search.placeholder" = "略語・ラベル・内容でスニペットを検索";
+"search.hint.navigate" = "移動";
+"search.hint.expand" = "展開";
+"search.hint.jump" = "ジャンプ";
+"search.hint.close" = "閉じる";
+"search.count" = "%d / %d件";

@@ -4,6 +4,7 @@ import SnipKeyKit
 
 struct ManagerView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var loc: LocalizationManager
 
     /// 어느 탭을 보여줄지. ⌘,가 Settings 탭을 직접 고를 수 있으려면 선택 바인딩이
     /// 있어야 한다(예전엔 바인딩이 없어 프로그램적으로 탭을 바꿀 수 없었다).
@@ -20,10 +21,10 @@ struct ManagerView: View {
         // 검색은 HotkeyManager가 계속 등록한다). 여기서 참조만 뗀다.
         TabView(selection: $selectedTab) {
             SnippetsTab()
-                .tabItem { Label("Snippets", systemImage: "text.badge.plus") }
+                .tabItem { Label(loc.s("tab.snippets"), systemImage: "text.badge.plus") }
                 .tag(Tab.snippets)
             SettingsTab()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tabItem { Label(loc.s("tab.settings"), systemImage: "gearshape") }
                 .tag(Tab.settings)
         }
         .frame(minWidth: 900, minHeight: 560)
@@ -45,17 +46,20 @@ enum SnippetSort: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    /// 현지화 카탈로그 키. 열거형은 View가 아니라 @EnvironmentObject를 쓸 수 없으므로,
+    /// 표시할 때 호출부에서 loc.s(locKey)로 번역한다.
+    var locKey: String {
         switch self {
-        case .abbreviation: return "Abbreviation"
-        case .label: return "Label"
-        case .recentlyModified: return "Recently Modified"
+        case .abbreviation: return "sort.abbreviation"
+        case .label: return "sort.label"
+        case .recentlyModified: return "sort.recentlyModified"
         }
     }
 }
 
 struct SnippetsTab: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var loc: LocalizationManager
 
     @State private var selectedGroupID: UUID?
     @State private var selectedSnippetID: UUID?
@@ -128,7 +132,7 @@ struct SnippetsTab: View {
     private var groupsSidebar: some View {
         VStack(spacing: 0) {
             List(selection: $selectedGroupID) {
-                Section("Groups") {
+                Section(loc.s("snippets.groups.header")) {
                     ForEach(store.groups) { group in
                         HStack {
                             Text(group.name)
@@ -137,7 +141,7 @@ struct SnippetsTab: View {
                             if !group.enabled {
                                 Image(systemName: "pause.circle")
                                     .foregroundStyle(.orange)
-                                    .help("This group is disabled — none of its snippets expand")
+                                    .help(loc.s("snippets.group.disabled.help"))
                             }
                             Text("\(group.snippets.count)")
                                 .foregroundStyle(.secondary)
@@ -145,12 +149,12 @@ struct SnippetsTab: View {
                         }
                         .tag(group.id)
                         .contextMenu {
-                            Button(group.enabled ? "Disable Group" : "Enable Group") {
+                            Button(group.enabled ? loc.s("snippets.group.disable") : loc.s("snippets.group.enable")) {
                                 toggleGroup(group.id)
                             }
-                            Button("Rename…") { renameGroup(group.id) }
+                            Button(loc.s("snippets.group.rename")) { renameGroup(group.id) }
                             Divider()
-                            Button("Delete Group", role: .destructive) { deleteGroup(group) }
+                            Button(loc.s("snippets.group.delete"), role: .destructive) { deleteGroup(group) }
                         }
                     }
                 }
@@ -159,16 +163,16 @@ struct SnippetsTab: View {
 
             HStack(spacing: 2) {
                 Button {
-                    let group = store.addGroup(named: "New Group")
+                    let group = store.addGroup(named: loc.s("snippets.group.newDefaultName"))
                     selectedGroupID = group.id
                     searchText = ""
                 } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
-                .help("New group")
+                .help(loc.s("snippets.newGroup.help"))
                 Spacer()
-                Text("\(store.allSnippets.count) snippets")
+                Text(loc.s("snippets.count", store.allSnippets.count))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -197,10 +201,10 @@ struct SnippetsTab: View {
                             .tag(hit.snippet.id)
                             .id(hit.snippet.id)
                             .contextMenu {
-                                Button("Duplicate") { duplicate(hit) }
-                                Button(hit.snippet.enabled ? "Disable" : "Enable") { toggleSnippet(hit) }
+                                Button(loc.s("snippets.duplicate")) { duplicate(hit) }
+                                Button(hit.snippet.enabled ? loc.s("snippets.disable") : loc.s("snippets.enable")) { toggleSnippet(hit) }
                                 Divider()
-                                Button("Delete", role: .destructive) {
+                                Button(loc.s("common.delete"), role: .destructive) {
                                     store.removeSnippet(id: hit.snippet.id, fromGroup: hit.groupID)
                                     if selectedSnippetID == hit.snippet.id { selectedSnippetID = nil }
                                 }
@@ -227,7 +231,7 @@ struct SnippetsTab: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .font(.callout)
-            TextField("Search all snippets", text: $searchText)
+            TextField(loc.s("snippets.search.placeholder"), text: $searchText)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
             if !searchText.isEmpty {
@@ -238,7 +242,7 @@ struct SnippetsTab: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Clear search")
+                .help(loc.s("snippets.clearSearch"))
             }
         }
         .padding(.horizontal, 8)
@@ -253,14 +257,14 @@ struct SnippetsTab: View {
                 .font(.largeTitle)
                 .foregroundStyle(.tertiary)
             if isSearching {
-                Text("No snippets match “\(searchText)”")
+                Text(loc.s("snippets.empty.noMatch", searchText))
                     .foregroundStyle(.secondary)
-                Button("Clear search") { searchText = "" }
+                Button(loc.s("snippets.clearSearch")) { searchText = "" }
                     .buttonStyle(.link)
             } else {
-                Text("This group has no snippets yet")
+                Text(loc.s("snippets.empty.groupEmpty"))
                     .foregroundStyle(.secondary)
-                Button("Add one") { addSnippet() }
+                Button(loc.s("snippets.empty.addOne")) { addSnippet() }
                     .buttonStyle(.link)
             }
         }
@@ -272,29 +276,29 @@ struct SnippetsTab: View {
             Button { addSnippet() } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
                 .disabled(store.groups.isEmpty)
-                .help("New snippet (⌘N)")
+                .help(loc.s("snippets.new.help"))
 
             Button { deleteSelectedSnippet() } label: { Image(systemName: "minus") }
                 .buttonStyle(.borderless)
                 .disabled(selectedSnippetID == nil)
-                .help("Delete snippet")
+                .help(loc.s("snippets.delete.help"))
 
             Spacer()
 
             if isSearching {
-                Text("\(visibleHits.count) found")
+                Text(loc.s("snippets.found", visibleHits.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 Picker("", selection: $sort) {
                     ForEach(SnippetSort.allCases) { option in
-                        Text(option.title).tag(option)
+                        Text(loc.s(option.locKey)).tag(option)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .fixedSize()
-                .help("Sort order")
+                .help(loc.s("snippets.sort.help"))
             }
         }
         .padding(8)
@@ -322,9 +326,9 @@ struct SnippetsTab: View {
                 Image(systemName: "text.badge.plus")
                     .font(.system(size: 40))
                     .foregroundStyle(.tertiary)
-                Text("Select a snippet to edit it")
+                Text(loc.s("editor.empty.title"))
                     .foregroundStyle(.secondary)
-                Text("Press ⌘N to create one, or ⌘/ anywhere to search and expand.")
+                Text(loc.s("editor.empty.hint"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -410,12 +414,12 @@ struct SnippetsTab: View {
     private func renameGroup(_ id: UUID) {
         guard let idx = store.groupIndex(of: id) else { return }
         let alert = NSAlert()
-        alert.messageText = "Rename Group"
+        alert.messageText = loc.s("snippets.group.renameTitle")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.stringValue = store.groups[idx].name
         alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: loc.s("common.rename"))
+        alert.addButton(withTitle: loc.s("common.cancel"))
         if alert.runModal() == .alertFirstButtonReturn, !field.stringValue.isEmpty {
             store.groups[idx].name = field.stringValue
         }
@@ -429,10 +433,10 @@ struct SnippetsTab: View {
         }
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Delete “\(group.name)”?"
-        alert.informativeText = "\(group.snippets.count) snippets will be deleted. This cannot be undone."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = loc.s("snippets.group.deleteTitle", group.name)
+        alert.informativeText = loc.s("snippets.group.deleteMessage", group.snippets.count)
+        alert.addButton(withTitle: loc.s("common.delete"))
+        alert.addButton(withTitle: loc.s("common.cancel"))
         if alert.runModal() == .alertFirstButtonReturn {
             store.removeGroup(id: group.id)
             if selectedGroupID == group.id { selectedGroupID = store.groups.first?.id }
@@ -443,6 +447,7 @@ struct SnippetsTab: View {
 // MARK: - Row
 
 private struct SnippetRow: View {
+    @EnvironmentObject var loc: LocalizationManager
     let hit: SearchHit
     let showGroup: Bool
     let isConflicting: Bool
@@ -455,7 +460,7 @@ private struct SnippetRow: View {
         let preview = snippet.content
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespaces)
-        return preview.isEmpty ? "Empty snippet" : preview
+        return preview.isEmpty ? loc.s("snippets.row.empty") : preview
     }
 
     var body: some View {
@@ -463,7 +468,7 @@ private struct SnippetRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     if snippet.abbreviation.isEmpty {
-                        Text("No abbreviation")
+                        Text(loc.s("snippets.row.noAbbreviation"))
                             .font(.system(.body, design: .monospaced))
                             .foregroundStyle(.tertiary)
                     } else {
@@ -475,13 +480,13 @@ private struct SnippetRow: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
-                            .help("Another snippet uses this abbreviation — only one of them can expand")
+                            .help(loc.s("snippets.row.conflict.help"))
                     }
                     if !snippet.enabled {
                         Image(systemName: "pause.circle")
                             .font(.caption)
                             .foregroundStyle(.orange)
-                            .help("Disabled")
+                            .help(loc.s("snippets.row.disabled.help"))
                     }
                 }
                 HStack(spacing: 4) {
@@ -522,6 +527,7 @@ private struct SnippetRow: View {
 // MARK: - Editor
 
 struct SnippetEditor: View {
+    @EnvironmentObject var loc: LocalizationManager
     @State var snippet: Snippet
     let conflicts: [SearchHit]
     let focusAbbreviationOnAppear: Bool
@@ -533,16 +539,16 @@ struct SnippetEditor: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Abbreviation").font(.caption).foregroundStyle(.secondary)
-                    TextField("e.g. ;sig", text: $snippet.abbreviation)
+                    Text(loc.s("editor.abbreviation.label")).font(.caption).foregroundStyle(.secondary)
+                    TextField(loc.s("editor.abbreviation.placeholder"), text: $snippet.abbreviation)
                         .font(.system(.body, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 180)
                         .focused($abbreviationFocused)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Label (optional)").font(.caption).foregroundStyle(.secondary)
-                    TextField("What this snippet is for", text: $snippet.label)
+                    Text(loc.s("editor.label.label")).font(.caption).foregroundStyle(.secondary)
+                    TextField(loc.s("editor.label.placeholder"), text: $snippet.label)
                         .textFieldStyle(.roundedBorder)
                 }
             }
@@ -550,8 +556,8 @@ struct SnippetEditor: View {
             if !conflicts.isEmpty {
                 Label(
                     conflicts.count == 1
-                        ? "“\(snippet.abbreviation)” is also used in \(conflicts[0].groupName). Only one of them can expand."
-                        : "“\(snippet.abbreviation)” is used by \(conflicts.count) other snippets. Only one of them can expand.",
+                        ? loc.s("editor.conflict.one", snippet.abbreviation, conflicts[0].groupName)
+                        : loc.s("editor.conflict.many", snippet.abbreviation, conflicts.count),
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.caption)
@@ -559,39 +565,42 @@ struct SnippetEditor: View {
             }
 
             HStack(spacing: 16) {
-                Toggle("Enabled", isOn: $snippet.enabled)
-                Toggle("Case sensitive", isOn: $snippet.caseSensitive)
-                    .help("When off, ;SIG and ;sig both expand")
+                Toggle(loc.s("editor.enabled"), isOn: $snippet.enabled)
+                Toggle(loc.s("editor.caseSensitive"), isOn: $snippet.caseSensitive)
+                    .help(loc.s("editor.caseSensitive.help"))
                 Spacer()
-                Menu("Insert Macro") {
-                    macroButton("Fill-in field", "%filltext:name=field%")
-                    macroButton("Multi-line fill-in", "%fillarea:name=notes%")
-                    macroButton("Popup choices", "%fillpopup:name=choice:option A:option B:default=option A%")
-                    macroButton("Optional section", "%fillpart:name=section:default=yes%...%fillpartend%")
+                Menu(loc.s("editor.insertMacro")) {
+                    // 라벨만 현지화한다 — 매크로 구문(%filltext…)은 기능이므로 절대 번역하지 않는다.
+                    macroButton(loc.s("macro.fillText"), "%filltext:name=field%")
+                    macroButton(loc.s("macro.fillArea"), "%fillarea:name=notes%")
+                    macroButton(loc.s("macro.fillPopup"), "%fillpopup:name=choice:option A:option B:default=option A%")
+                    macroButton(loc.s("macro.fillPart"), "%fillpart:name=section:default=yes%...%fillpartend%")
                     Divider()
-                    macroButton("Clipboard", "%clipboard")
-                    macroButton("Cursor position", "%|")
-                    macroButton("Another snippet", "%snippet:;abbrev%")
+                    macroButton(loc.s("macro.clipboard"), "%clipboard")
+                    macroButton(loc.s("macro.cursor"), "%|")
+                    macroButton(loc.s("macro.snippet"), "%snippet:;abbrev%")
                     Divider()
-                    macroButton("Date (2026-07-13)", "%date:yyyy-MM-dd%")
-                    macroButton("Time (14:30)", "%date:HH:mm%")
-                    macroButton("Press Enter", "%key:enter%")
+                    macroButton(loc.s("macro.date"), "%date:yyyy-MM-dd%")
+                    macroButton(loc.s("macro.time"), "%date:HH:mm%")
+                    macroButton(loc.s("macro.key"), "%key:enter%")
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
 
-            Text("Content").font(.caption).foregroundStyle(.secondary)
+            Text(loc.s("editor.content")).font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $snippet.content)
                 .font(.system(.body, design: .monospaced))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
 
             HStack {
-                Text("Created \(snippet.createdAt.formatted(date: .abbreviated, time: .omitted)) · Modified \(snippet.modifiedAt.formatted(date: .abbreviated, time: .omitted))")
+                Text(loc.s("editor.dates",
+                           snippet.createdAt.formatted(date: .abbreviated, time: .omitted),
+                           snippet.modifiedAt.formatted(date: .abbreviated, time: .omitted)))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                Text("\(snippet.content.count) characters")
+                Text(loc.s("editor.charCount", snippet.content.count))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

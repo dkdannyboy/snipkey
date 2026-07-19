@@ -1,0 +1,273 @@
+/* SnipKey UI strings — English (source of truth). Keys are shared verbatim
+   across en/ko/ja; a unit test enforces that the three key sets are identical. */
+
+/* MARK: Common */
+"common.cancel" = "Cancel";
+"common.delete" = "Delete";
+"common.rename" = "Rename";
+"common.back" = "Back";
+"common.clear" = "Clear";
+
+/* MARK: Tabs & window */
+"tab.snippets" = "Snippets";
+"tab.settings" = "Settings";
+"window.main" = "SnipKey";
+
+/* MARK: Main menu */
+"menu.file" = "File";
+"menu.edit" = "Edit";
+"menu.window" = "Window";
+"menu.about" = "About SnipKey";
+"menu.settings" = "Settings…";
+"menu.hide" = "Hide SnipKey";
+"menu.quit" = "Quit SnipKey";
+"menu.newSnippet" = "New Snippet";
+"menu.closeWindow" = "Close Window";
+"menu.undo" = "Undo";
+"menu.redo" = "Redo";
+"menu.cut" = "Cut";
+"menu.copy" = "Copy";
+"menu.paste" = "Paste";
+"menu.delete" = "Delete";
+"menu.selectAll" = "Select All";
+"menu.findSnippet" = "Find Snippet";
+"menu.minimize" = "Minimize";
+"menu.zoom" = "Zoom";
+
+/* MARK: Status bar menu */
+"status.expansionOn" = "Expansion: On";
+"status.expansionOff" = "Expansion: Off";
+"status.accessibilityNeeded" = "⚠ Accessibility permission needed…";
+"status.searchSnippets" = "Search Snippets… (%@)";
+"status.openSnipKey" = "Open SnipKey…";
+"status.stats" = "%d snippets · %d expansions";
+"status.setupAssistant" = "Setup Assistant…";
+
+/* MARK: Snippets manager */
+"snippets.groups.header" = "Groups";
+"snippets.group.disabled.help" = "This group is disabled — none of its snippets expand";
+"snippets.group.disable" = "Disable Group";
+"snippets.group.enable" = "Enable Group";
+"snippets.group.rename" = "Rename…";
+"snippets.group.delete" = "Delete Group";
+"snippets.group.newDefaultName" = "New Group";
+"snippets.group.renameTitle" = "Rename Group";
+"snippets.group.deleteTitle" = "Delete “%@”?";
+"snippets.group.deleteMessage" = "%d snippets will be deleted. This cannot be undone.";
+"snippets.newGroup.help" = "New group";
+"snippets.count" = "%d snippets";
+"snippets.duplicate" = "Duplicate";
+"snippets.disable" = "Disable";
+"snippets.enable" = "Enable";
+"snippets.search.placeholder" = "Search all snippets";
+"snippets.clearSearch" = "Clear search";
+"snippets.empty.noMatch" = "No snippets match “%@”";
+"snippets.empty.groupEmpty" = "This group has no snippets yet";
+"snippets.empty.addOne" = "Add one";
+"snippets.new.help" = "New snippet (⌘N)";
+"snippets.delete.help" = "Delete snippet";
+"snippets.found" = "%d found";
+"snippets.sort.help" = "Sort order";
+"snippets.row.empty" = "Empty snippet";
+"snippets.row.noAbbreviation" = "No abbreviation";
+"snippets.row.conflict.help" = "Another snippet uses this abbreviation — only one of them can expand";
+"snippets.row.disabled.help" = "Disabled";
+
+/* MARK: Sort options */
+"sort.abbreviation" = "Abbreviation";
+"sort.label" = "Label";
+"sort.recentlyModified" = "Recently Modified";
+
+/* MARK: Snippet editor */
+"editor.empty.title" = "Select a snippet to edit it";
+"editor.empty.hint" = "Press ⌘N to create one, or ⌘/ anywhere to search and expand.";
+"editor.abbreviation.label" = "Abbreviation";
+"editor.abbreviation.placeholder" = "e.g. ;sig";
+"editor.label.label" = "Label (optional)";
+"editor.label.placeholder" = "What this snippet is for";
+"editor.conflict.one" = "“%@” is also used in %@. Only one of them can expand.";
+"editor.conflict.many" = "“%@” is used by %d other snippets. Only one of them can expand.";
+"editor.enabled" = "Enabled";
+"editor.caseSensitive" = "Case sensitive";
+"editor.caseSensitive.help" = "When off, ;SIG and ;sig both expand";
+"editor.insertMacro" = "Insert Macro";
+"editor.content" = "Content";
+"editor.dates" = "Created %@ · Modified %@";
+"editor.charCount" = "%d characters";
+
+/* MARK: Insert-macro menu labels (the macro syntax itself is never translated) */
+"macro.fillText" = "Fill-in field";
+"macro.fillArea" = "Multi-line fill-in";
+"macro.fillPopup" = "Popup choices";
+"macro.fillPart" = "Optional section";
+"macro.clipboard" = "Clipboard";
+"macro.cursor" = "Cursor position";
+"macro.snippet" = "Another snippet";
+"macro.date" = "Date (2026-07-13)";
+"macro.time" = "Time (14:30)";
+"macro.key" = "Press Enter";
+
+/* MARK: Settings — General */
+"settings.general.header" = "General";
+"settings.general.enableExpansion" = "Enable text expansion";
+"settings.general.playSound" = "Play sound when a snippet expands";
+"settings.general.launchAtLogin" = "Launch SnipKey at login";
+
+/* MARK: Settings — Language */
+"settings.language.header" = "Language";
+"settings.language.systemDefault" = "System default";
+
+/* MARK: Settings — Search Anywhere */
+"settings.search.header" = "Search Anywhere";
+"settings.search.enable" = "Enable search-anywhere palette";
+"settings.search.shortcut" = "Shortcut";
+"settings.search.help" = "Press it while typing in any app to search your snippets by abbreviation, label, or content, then press Return to expand the one you want. Handy when you cannot remember an abbreviation.";
+
+/* MARK: Settings — Permissions */
+"settings.permission.header" = "Permissions";
+"settings.permission.granted" = "Accessibility permission granted";
+"settings.permission.required" = "Accessibility permission required for expansion";
+"settings.permission.openSettings" = "Open System Settings";
+"settings.permission.stale.title" = "Stopped working after updating SnipKey?";
+"settings.permission.stale.body" = "An update changes the app's signature, and macOS keeps showing the old switch as on while ignoring it. Clear the stale entry, then switch SnipKey back on in System Settings.";
+"settings.permission.clearRegrant" = "Clear Permission and Re-grant…";
+
+/* MARK: Settings — Data */
+"settings.data.header" = "Data";
+"settings.data.importTE" = "Import from TextExpander…";
+"settings.data.importFolder" = "Import from folder…";
+"settings.data.export" = "Export snippets…";
+"settings.data.openLog" = "Open Log";
+
+/* MARK: Settings — Statistics */
+"settings.stats.header" = "Statistics";
+"settings.stats.groups" = "Groups";
+"settings.stats.snippets" = "Snippets";
+"settings.stats.expansions" = "Total expansions";
+
+/* MARK: Settings — section headers for failure states */
+"settings.loadFailure.header" = "Snippet Library Could Not Be Opened";
+"settings.remoteChange.header" = "Another Mac Changed Your Snippets";
+
+/* MARK: Settings — Sync */
+"settings.sync.header" = "Sync";
+"settings.sync.syncingVia" = "Syncing via";
+"settings.sync.storingLocally" = "Storing locally";
+"settings.sync.saveAs" = "Save Snippets As…";
+"settings.sync.link" = "Link to Snippets…";
+"settings.sync.dontSync" = "Don't Sync";
+"settings.sync.help" = "Point SnipKey at a folder your cloud service already syncs (for example iCloud Drive). SnipKey does not sync by itself — it only chooses the location and refuses to destroy your snippets when a file changes underneath it.";
+"settings.sync.conflictCopy" = "Conflict copy";
+"settings.sync.reveal" = "Reveal";
+"settings.sync.loadVersion" = "Load This Version";
+"settings.sync.loadedConflict" = "Loaded the conflict copy into your library.";
+"settings.sync.loadConflictFailed" = "Could not load that conflict copy.";
+"settings.sync.savePanel.prompt" = "Save Here";
+"settings.sync.savePanel.message" = "Choose a folder your cloud service syncs (e.g. a folder in iCloud Drive).";
+"settings.sync.savedMessage" = "Saved %d snippets to %@. SnipKey now syncs from there; your previous local copy is left untouched.";
+"settings.sync.saveFailed" = "Could not save there: %@.";
+"settings.sync.linkPanel.prompt" = "Link";
+"settings.sync.linkPanel.message" = "Choose the existing SnipKey snippet file in your synced folder.";
+"settings.sync.nowSyncing" = "Now syncing from %@.";
+"settings.sync.linkBackup" = " Your previous local snippets were backed up to %@ and can be recovered.";
+"settings.sync.stopTitle" = "Stop syncing this Mac?";
+"settings.sync.stopMessage" = "SnipKey will copy your current snippets back to this Mac and stop following the synced file. The synced file itself is left in place for your other Macs.";
+"settings.sync.stopButton" = "Stop Syncing";
+"settings.sync.stoppedMessage" = "Stopped syncing. Your snippets are stored locally again at %@; the synced file was left in place.";
+
+/* MARK: Import results (shared by Settings and Onboarding where noted) */
+"settings.import.notFound" = "No TextExpander data found in the usual locations. Use “Import from folder…” to pick a .textexpandersettings or .textexpanderbackup folder.";
+"settings.import.panelMessage" = "Choose a TextExpander data folder (.textexpandersettings or .textexpanderbackup)";
+"settings.import.success" = "Imported %d snippets in %d groups from %@.";
+"settings.import.richTextNote" = " %d formatted snippets were converted to plain text.";
+"settings.import.blockedLoadFailure" = "Nothing was imported. SnipKey cannot read your existing snippet library and will not overwrite it — resolve that above first.";
+"settings.import.blockedRemote" = "Nothing was imported. Your snippet library was changed by another Mac since SnipKey read it, and importing would overwrite that change. Quit and reopen SnipKey to pick up the newer library first.";
+"settings.import.blockedUnavailable" = "Nothing was imported. SnipKey cannot find your snippet library at its configured location — it may still be downloading, or its volume may be unmounted.";
+"settings.import.blockedNewerSchema" = "Nothing was imported. Your snippet library was written by a newer version of SnipKey, and this version would silently drop what it does not understand. Update SnipKey first.";
+"settings.import.saveFailed" = "Nothing was imported. Saving failed: %@";
+"settings.import.failed" = "Import failed: %@";
+
+/* MARK: Load-failure view */
+"loadFailure.title" = "SnipKey found your snippet file but could not read it, so it is showing an empty library.";
+"loadFailure.subtitle" = "Nothing has been overwritten — SnipKey will not save until you choose what to do.";
+"loadFailure.backup" = "A copy was kept at %@.";
+"loadFailure.showFile" = "Show the File";
+"loadFailure.tryAgain" = "Try Again";
+"loadFailure.startFresh" = "Start Fresh (Discard)";
+"loadFailure.confirmTitle" = "Start with an empty snippet library?";
+"loadFailure.confirmWithBackup" = "The unreadable file will be replaced. A copy stays at %@.";
+"loadFailure.confirmNoBackup" = "The unreadable file will be replaced, and no backup copy could be made.";
+"loadFailure.confirmButton" = "Start Fresh";
+
+/* MARK: Remote-change view */
+"remoteChange.title" = "Your snippet library was changed on another Mac after SnipKey read it, so saving is paused.";
+"remoteChange.subtitle" = "Nothing has been lost. Choose what to do — every option keeps both versions recoverable on disk.";
+"remoteChange.takeTheirs" = "Take Theirs";
+"remoteChange.tookTheirsBackup" = "Loaded the other Mac's version. Your local edits were backed up to %@.";
+"remoteChange.tookTheirs" = "Loaded the other Mac's version.";
+"remoteChange.keepMine" = "Keep Mine";
+"remoteChange.keptMineBackup" = "Kept your version. The other Mac's version was backed up to %@.";
+"remoteChange.keptMine" = "Kept your version.";
+"remoteChange.keepBoth" = "Keep Both";
+"remoteChange.keptBothBackup" = "Wrote your version to %@ and loaded the other Mac's version.";
+"remoteChange.keptBoth" = "Kept both versions.";
+
+/* MARK: Onboarding */
+"onboarding.continue" = "Continue";
+"onboarding.start" = "Start Using SnipKey";
+"onboarding.welcome.title" = "Welcome to SnipKey";
+"onboarding.welcome.subtitle" = "Type a short abbreviation anywhere — SnipKey instantly replaces it with your full text.";
+"onboarding.feature.expansion.title" = "Text expansion in every app";
+"onboarding.feature.expansion.detail" = "Abbreviations like ;sig become full snippets as you type.";
+"onboarding.feature.migration.title" = "TextExpander migration";
+"onboarding.feature.migration.detail" = "Import your existing groups and abbreviations in one click.";
+"onboarding.feature.fillin.title" = "Fill-in forms";
+"onboarding.feature.fillin.detail" = "Snippets can pause and ask for names, amounts, or choices.";
+"onboarding.permission.title" = "Accessibility Permission";
+"onboarding.permission.body" = "SnipKey needs macOS Accessibility access to see what you type and to insert your snippets. Nothing you type ever leaves your Mac — SnipKey has no network features at all.";
+"onboarding.permission.granted" = "Permission granted — you're all set!";
+"onboarding.permission.grant" = "Grant Access in System Settings";
+"onboarding.permission.instructions" = "System Settings → Privacy & Security → Accessibility → turn on SnipKey.\nThis page updates automatically once access is granted.";
+"onboarding.permission.clearRetry" = "Already on but not working? Clear it and try again";
+"onboarding.data.title" = "Your Snippets";
+"onboarding.data.subtitle" = "Coming from TextExpander? Bring everything with you.\nStarting fresh? We'll add a few sample snippets to play with.";
+"onboarding.data.importTE" = "Import from TextExpander";
+"onboarding.data.found" = "Found: %@";
+"onboarding.data.chooseFolder" = "Choose a TextExpander folder…";
+"onboarding.data.startFresh" = "Start fresh with sample snippets";
+"onboarding.data.panelMessage" = "Choose a .textexpandersettings or .textexpanderbackup folder";
+"onboarding.import.success" = "Imported %d snippets in %d groups. Welcome back!";
+"onboarding.import.blockedLoadFailure" = "Nothing was imported — SnipKey could not read the snippet library already on this Mac and will not overwrite it. Open Settings to retry that file or start fresh, then import again.";
+"onboarding.import.blockedOther" = "Nothing was imported — SnipKey will not write over the snippet library at its configured location. Quit and reopen SnipKey once the library is available, then import again.";
+"onboarding.startFresh.readOnly" = "SnipKey could not read the snippet library already on this Mac. Open Settings to retry that file or discard it before adding snippets.";
+"onboarding.startFresh.added" = "Added a “Getting Started” group with sample snippets.";
+"onboarding.startFresh.blockedLoadFailure" = "SnipKey could not read the snippet library already on this Mac, so nothing was saved.";
+"onboarding.startFresh.blockedOther" = "SnipKey will not write over the snippet library at its configured location, so nothing was saved.";
+"onboarding.startFresh.saveFailed" = "Could not save the sample snippets: %@";
+"onboarding.tryit.title" = "Try It Out";
+"onboarding.tryit.body" = "Type the abbreviation of any of your snippets in the box below —\nor in any other app. It expands the moment you finish typing it.";
+"onboarding.tryit.needPermission" = "Grant Accessibility permission (step 2) first, then come back to try it.";
+"onboarding.tryit.tips.title" = "Quick tips";
+"onboarding.tryit.tip1" = "• The menu bar ⚡ icon opens your snippet library and settings.";
+"onboarding.tryit.tip2" = "• Snippets with %filltext:…% pause and ask you to fill in the blanks.";
+"onboarding.tryit.placeholder" = "Type %@ here";
+
+/* MARK: Star prompt (NSAlert, read at present-time) */
+"star.title" = "Enjoying SnipKey?";
+"star.message" = "You've expanded %d snippets. If SnipKey saves you time, a star on GitHub helps others find it.";
+"star.button.star" = "Star on GitHub";
+"star.button.later" = "Later";
+"star.button.never" = "Don't ask again";
+
+/* MARK: Fill-in panel */
+"fillin.title" = "Fill In";
+"fillin.insert" = "Insert";
+"fillin.include" = "Include: %@";
+
+/* MARK: Inline search palette */
+"search.placeholder" = "Search snippets by abbreviation, label, or content";
+"search.hint.navigate" = "Navigate";
+"search.hint.expand" = "Expand";
+"search.hint.jump" = "Jump";
+"search.hint.close" = "Close";
+"search.count" = "%d of %d";

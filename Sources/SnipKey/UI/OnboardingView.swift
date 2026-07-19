@@ -5,6 +5,7 @@ import SnipKeyKit
 /// First-launch assistant: welcome → permission → data → try it out.
 struct OnboardingView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var loc: LocalizationManager
     let onFinished: () -> Void
 
     @State private var step = 0
@@ -25,17 +26,17 @@ struct OnboardingView: View {
             Divider()
             HStack {
                 if step > 0 {
-                    Button("Back") { step -= 1 }
+                    Button(loc.s("common.back")) { step -= 1 }
                 }
                 Spacer()
                 stepDots
                 Spacer()
                 if step < totalSteps - 1 {
-                    Button("Continue") { step += 1 }
+                    Button(loc.s("onboarding.continue")) { step += 1 }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                 } else {
-                    Button("Start Using SnipKey") { onFinished() }
+                    Button(loc.s("onboarding.start")) { onFinished() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                 }
@@ -77,21 +78,21 @@ struct OnboardingView: View {
             Image(systemName: "bolt.square.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(Color.accentColor)
-            Text("Welcome to SnipKey")
+            Text(loc.s("onboarding.welcome.title"))
                 .font(.largeTitle.bold())
-            Text("Type a short abbreviation anywhere — SnipKey instantly replaces it with your full text.")
+            Text(loc.s("onboarding.welcome.subtitle"))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 10) {
-                featureRow("keyboard", "Text expansion in every app",
-                           "Abbreviations like ;sig become full snippets as you type.")
-                featureRow("square.and.arrow.down", "TextExpander migration",
-                           "Import your existing groups and abbreviations in one click.")
+                featureRow("keyboard", loc.s("onboarding.feature.expansion.title"),
+                           loc.s("onboarding.feature.expansion.detail"))
+                featureRow("square.and.arrow.down", loc.s("onboarding.feature.migration.title"),
+                           loc.s("onboarding.feature.migration.detail"))
                 // Hotkey macros 소개는 뺀다 — 이 버전에서 그 기능을 감췄으므로, 온보딩이
                 // 도달할 수 없는 기능을 광고하면 안 된다.
-                featureRow("questionmark.text.page", "Fill-in forms",
-                           "Snippets can pause and ask for names, amounts, or choices.")
+                featureRow("questionmark.text.page", loc.s("onboarding.feature.fillin.title"),
+                           loc.s("onboarding.feature.fillin.detail"))
             }
             .padding(.top, 8)
         }
@@ -116,29 +117,29 @@ struct OnboardingView: View {
             Image(systemName: accessibilityGranted ? "checkmark.shield.fill" : "hand.raised.square")
                 .font(.system(size: 48))
                 .foregroundStyle(accessibilityGranted ? .green : Color.accentColor)
-            Text("Accessibility Permission")
+            Text(loc.s("onboarding.permission.title"))
                 .font(.title.bold())
-            Text("SnipKey needs macOS Accessibility access to see what you type and to insert your snippets. Nothing you type ever leaves your Mac — SnipKey has no network features at all.")
+            Text(loc.s("onboarding.permission.body"))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
             if accessibilityGranted {
-                Label("Permission granted — you're all set!", systemImage: "checkmark.circle.fill")
+                Label(loc.s("onboarding.permission.granted"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.headline)
                     .padding(.top, 8)
             } else {
                 VStack(spacing: 10) {
-                    Button("Grant Access in System Settings") {
+                    Button(loc.s("onboarding.permission.grant")) {
                         ExpansionEngine.requestAccessibilityPermission()
                         ExpansionEngine.openAccessibilitySettings()
                     }
                     .buttonStyle(.borderedProminent)
-                    Text("System Settings → Privacy & Security → Accessibility → turn on SnipKey.\nThis page updates automatically once access is granted.")
+                    Text(loc.s("onboarding.permission.instructions"))
                         .font(.caption)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.tertiary)
-                    Button("Already on but not working? Clear it and try again") {
+                    Button(loc.s("onboarding.permission.clearRetry")) {
                         ExpansionEngine.resetAccessibilityGrant()
                         ExpansionEngine.openAccessibilitySettings()
                     }
@@ -157,7 +158,7 @@ struct OnboardingView: View {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.accentColor)
-            Text("Your Snippets")
+            Text(loc.s("onboarding.data.title"))
                 .font(.title.bold())
 
             if let importSummary {
@@ -165,7 +166,7 @@ struct OnboardingView: View {
                     .foregroundStyle(.green)
                     .multilineTextAlignment(.center)
             } else {
-                Text("Coming from TextExpander? Bring everything with you.\nStarting fresh? We'll add a few sample snippets to play with.")
+                Text(loc.s("onboarding.data.subtitle"))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
             }
@@ -176,8 +177,8 @@ struct OnboardingView: View {
                         runImport(folder)
                     } label: {
                         VStack(spacing: 2) {
-                            Text("Import from TextExpander").bold()
-                            Text("Found: \(folder.path)")
+                            Text(loc.s("onboarding.data.importTE")).bold()
+                            Text(loc.s("onboarding.data.found", folder.path))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -187,8 +188,8 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(.borderedProminent)
                 }
-                Button("Choose a TextExpander folder…") { chooseFolder() }
-                Button("Start fresh with sample snippets") { startFresh() }
+                Button(loc.s("onboarding.data.chooseFolder")) { chooseFolder() }
+                Button(loc.s("onboarding.data.startFresh")) { startFresh() }
             }
             .padding(.top, 4)
         }
@@ -199,16 +200,16 @@ struct OnboardingView: View {
             let result = try TEImporter.importFolder(folder)
             switch store.importGroups(result.groups) {
             case .saved:
-                importSummary = "Imported \(result.snippetCount) snippets in \(result.groups.count) groups. Welcome back!"
+                importSummary = loc.s("onboarding.import.success", result.snippetCount, result.groups.count)
             case .blockedByLoadFailure:
-                importSummary = "Nothing was imported — SnipKey could not read the snippet library already on this Mac and will not overwrite it. Open Settings to retry that file or start fresh, then import again."
+                importSummary = loc.s("onboarding.import.blockedLoadFailure")
             case .blockedByRemoteChange, .blockedByUnavailableLibrary, .blockedByNewerSchema:
-                importSummary = "Nothing was imported — SnipKey will not write over the snippet library at its configured location. Quit and reopen SnipKey once the library is available, then import again."
+                importSummary = loc.s("onboarding.import.blockedOther")
             case .failed(let message):
-                importSummary = "Nothing was imported. Saving failed: \(message)"
+                importSummary = loc.s("settings.import.saveFailed", message)
             }
         } catch {
-            importSummary = "Import failed: \(error.localizedDescription)"
+            importSummary = loc.s("settings.import.failed", error.localizedDescription)
         }
     }
 
@@ -217,7 +218,7 @@ struct OnboardingView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.treatsFilePackagesAsDirectories = true
-        panel.message = "Choose a .textexpandersettings or .textexpanderbackup folder"
+        panel.message = loc.s("onboarding.data.panelMessage")
         if panel.runModal() == .OK, let url = panel.url {
             runImport(url)
         }
@@ -225,21 +226,23 @@ struct OnboardingView: View {
 
     private func startFresh() {
         guard !store.isReadOnlyUntilRecovered else {
-            importSummary = "SnipKey could not read the snippet library already on this Mac. Open Settings to retry that file or discard it before adding snippets."
+            importSummary = loc.s("onboarding.startFresh.readOnly")
             return
         }
+        // "Getting Started"는 데이터 씨앗의 이름(파일에 그대로 남는 사용자 데이터)이라
+        // 번역하지 않는다 — 여기 존재 여부 검사가 그 영어 이름에 걸려 있기 때문이다.
         if !store.groups.contains(where: { $0.name == "Getting Started" }) {
             store.groups.append(Store.starterGroup())
         }
         switch store.saveNow() {
         case .saved:
-            importSummary = "Added a “Getting Started” group with sample snippets."
+            importSummary = loc.s("onboarding.startFresh.added")
         case .blockedByLoadFailure:
-            importSummary = "SnipKey could not read the snippet library already on this Mac, so nothing was saved."
+            importSummary = loc.s("onboarding.startFresh.blockedLoadFailure")
         case .blockedByRemoteChange, .blockedByUnavailableLibrary, .blockedByNewerSchema:
-            importSummary = "SnipKey will not write over the snippet library at its configured location, so nothing was saved."
+            importSummary = loc.s("onboarding.startFresh.blockedOther")
         case .failed(let message):
-            importSummary = "Could not save the sample snippets: \(message)"
+            importSummary = loc.s("onboarding.startFresh.saveFailed", message)
         }
     }
 
@@ -250,15 +253,15 @@ struct OnboardingView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.accentColor)
-            Text("Try It Out")
+            Text(loc.s("onboarding.tryit.title"))
                 .font(.title.bold())
 
             if accessibilityGranted {
-                Text("Type the abbreviation of any of your snippets in the box below —\nor in any other app. It expands the moment you finish typing it.")
+                Text(loc.s("onboarding.tryit.body"))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
             } else {
-                Label("Grant Accessibility permission (step 2) first, then come back to try it.", systemImage: "exclamationmark.triangle")
+                Label(loc.s("onboarding.tryit.needPermission"), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
             }
 
@@ -268,9 +271,9 @@ struct OnboardingView: View {
                 .frame(width: 360)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Quick tips").font(.headline)
-                Text("• The menu bar ⚡ icon opens your snippet library and settings.")
-                Text("• Snippets with %filltext:…% pause and ask you to fill in the blanks.")
+                Text(loc.s("onboarding.tryit.tips.title")).font(.headline)
+                Text(loc.s("onboarding.tryit.tip1"))
+                Text(loc.s("onboarding.tryit.tip2"))
                 // Hotkeys 탭 안내는 뺀다 — 탭 자체를 감췄으므로 없는 탭을 가리키면 안 된다.
             }
             .font(.callout)
@@ -285,8 +288,8 @@ struct OnboardingView: View {
 
     private var placeholderAbbrev: String {
         if let first = store.allSnippets.first(where: { $0.enabled && !$0.abbreviation.isEmpty }) {
-            return "Type \(first.abbreviation) here"
+            return loc.s("onboarding.tryit.placeholder", first.abbreviation)
         }
-        return "Type ;hello here"
+        return loc.s("onboarding.tryit.placeholder", ";hello")
     }
 }

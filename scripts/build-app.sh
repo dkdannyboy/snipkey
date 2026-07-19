@@ -70,6 +70,16 @@ if [[ ! -f "$DIST/AppIcon.icns" ]]; then
 fi
 cp "$DIST/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
+# SwiftPM이 만든 현지화 리소스 번들(en/ko/ja.lproj)을 앱 안으로 넣는다. Bundle.module은
+# 런타임에 Contents/Resources에서 이 번들을 찾으므로, 빠뜨리면 다국어가 키로만 표시된다.
+# 서명 '전에' 복사해야 codesign이 이 번들까지 서명한다.
+RESOURCE_BUNDLE="$ROOT/.build/release/SnipKey_SnipKey.bundle"
+if [[ -d "$RESOURCE_BUNDLE" ]]; then
+  cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
+else
+  echo "  경고: $RESOURCE_BUNDLE 이 없다 — 현지화 문자열이 앱에 포함되지 않는다."
+fi
+
 # ── 서명 ────────────────────────────────────────────────────────────────────
 if [[ "$SIGN_TIER" == "adhoc" ]]; then
   echo "▸ Code signing (ad-hoc)…"

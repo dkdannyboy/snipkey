@@ -5,6 +5,7 @@ import SnipKeyKit
 /// The menu bar item and its menu.
 final class StatusBarController: NSObject, NSMenuDelegate {
     private let store: Store
+    private let loc: LocalizationManager
     private let openManager: () -> Void
     private let openOnboarding: () -> Void
     private let openSearch: () -> Void
@@ -13,12 +14,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     init(
         store: Store,
+        loc: LocalizationManager,
         openManager: @escaping () -> Void,
         openOnboarding: @escaping () -> Void,
         openSearch: @escaping () -> Void,
         openSettings: @escaping () -> Void
     ) {
         self.store = store
+        self.loc = loc
         self.openManager = openManager
         self.openOnboarding = openOnboarding
         self.openSearch = openSearch
@@ -43,7 +46,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         let enabled = store.settings.expansionEnabled
         let toggle = NSMenuItem(
-            title: enabled ? "Expansion: On" : "Expansion: Off",
+            title: enabled ? loc.s("status.expansionOn") : loc.s("status.expansionOff"),
             action: #selector(toggleExpansion),
             keyEquivalent: "e"
         )
@@ -53,7 +56,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         if !ExpansionEngine.hasAccessibilityPermission {
             let warn = NSMenuItem(
-                title: "⚠ Accessibility permission needed…",
+                title: loc.s("status.accessibilityNeeded"),
                 action: #selector(openAccessibilitySettings),
                 keyEquivalent: ""
             )
@@ -63,8 +66,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let shortcut = HotkeyFormatter.description(
+            keyCode: store.settings.inlineSearchKeyCode,
+            carbonModifiers: store.settings.inlineSearchModifiers
+        )
         let search = NSMenuItem(
-            title: "Search Snippets… (\(HotkeyFormatter.description(keyCode: store.settings.inlineSearchKeyCode, carbonModifiers: store.settings.inlineSearchModifiers)))",
+            title: loc.s("status.searchSnippets", shortcut),
             action: #selector(openInlineSearch),
             keyEquivalent: ""
         )
@@ -72,19 +79,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         search.isEnabled = store.settings.inlineSearchEnabled
         menu.addItem(search)
 
-        let open = NSMenuItem(title: "Open SnipKey…", action: #selector(openManagerWindow), keyEquivalent: "o")
+        let open = NSMenuItem(title: loc.s("status.openSnipKey"), action: #selector(openManagerWindow), keyEquivalent: "o")
         open.target = self
         menu.addItem(open)
 
         // 설정으로 가는 두 번째 문. 표준 ⌘, 메뉴가 창을 띄우고 Settings 탭을 고르는데,
         // 상태바에서도 같은 곳으로 바로 갈 수 있어야 발견 가능성이 올라간다.
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettingsTab), keyEquivalent: ",")
+        let settings = NSMenuItem(title: loc.s("menu.settings"), action: #selector(openSettingsTab), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
 
-        let snippetCount = store.allSnippets.count
         let stats = NSMenuItem(
-            title: "\(snippetCount) snippets · \(store.expansionCount) expansions",
+            title: loc.s("status.stats", store.allSnippets.count, store.expansionCount),
             action: nil,
             keyEquivalent: ""
         )
@@ -93,13 +99,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let setup = NSMenuItem(title: "Setup Assistant…", action: #selector(openOnboardingWindow), keyEquivalent: "")
+        let setup = NSMenuItem(title: loc.s("status.setupAssistant"), action: #selector(openOnboardingWindow), keyEquivalent: "")
         setup.target = self
         menu.addItem(setup)
 
         menu.addItem(.separator())
 
-        let quit = NSMenuItem(title: "Quit SnipKey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: loc.s("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
     }
 
