@@ -27,6 +27,28 @@ final class LocalizationManager: ObservableObject {
 
     static let deviceKey = "SnipKey.device.uiLanguage"
 
+    /// 현지화 리소스 번들을 직접 찾는다. `Bundle.module`을 쓰지 않는 이유가 크다:
+    /// SwiftPM이 만든 `Bundle.module` 접근자는 리소스 번들을 `Bundle.main.bundleURL`
+    /// (= .app 최상위)와 빌드 디렉터리에서만 찾고, 못 찾으면 **fatalError로 앱을
+    /// 죽인다**. 그런데 우리는 build-app.sh에서 서명 규칙에 맞게 번들을
+    /// `Contents/Resources`(= `Bundle.main.resourceURL`)에 넣으므로, 위치가 어긋나
+    /// 설치본이 실행 즉시 크래시했다(1.2.0에서 실제로 발생). 그래서 여러 후보를 직접
+    /// 뒤지고, 그래도 없으면 크래시 대신 메인 번들로 떨어진다 — 문자열이 키로 나올지언정
+    /// 앱이 죽는 것보다 낫다.
+    static let resourceBundle: Bundle = {
+        let name = "SnipKey_SnipKey.bundle"
+        let candidates: [URL?] = [
+            Bundle.main.resourceURL,                                  // .app/Contents/Resources ← 실제 위치
+            Bundle.main.bundleURL,                                    // .app 자체
+            Bundle.main.executableURL?.deletingLastPathComponent(),   // Contents/MacOS (CLI 실행 시 실행파일 옆)
+            Bundle(for: LocalizationManager.self).resourceURL,        // 프레임워크형 배치 대비
+        ]
+        for base in candidates.compactMap({ $0 }) {
+            if let b = Bundle(url: base.appendingPathComponent(name)) { return b }
+        }
+        return .main
+    }()
+
     private let deviceDefaults: UserDefaults
     /// 현재 실효 언어의 .lproj 번들. Bundle.module 전체가 아니라 특정 언어 번들을 직접
     /// 골라 잡는 이유는 즉시-전환 때문이다 — macOS 표준 번들 조회는 실행 시점의 시스템
@@ -38,7 +60,7 @@ final class LocalizationManager: ObservableObject {
         let stored = deviceDefaults.string(forKey: Self.deviceKey)
         let initial = stored.flatMap(AppLanguage.init(rawValue:)) ?? .system
         self.language = initial
-        self.bundle = .module
+        self.bundle = Self.resourceBundle
         rebuildBundle()
     }
 
@@ -48,12 +70,12 @@ final class LocalizationManager: ObservableObject {
             preferredLanguages: Locale.preferredLanguages,
             selection: language
         )
-        if let url = Bundle.module.url(forResource: code, withExtension: "lproj"),
+        if let url = Self.resourceBundle.url(forResource: code, withExtension: "lproj"),
            let localized = Bundle(url: url) {
             bundle = localized
         } else {
-            // lproj를 못 찾으면 최소한 기본 번들로 떨어져 키 대신 en 문자열이 나오게 한다.
-            bundle = .module
+            // lproj를 못 찾으면 리소스 번들 자체로 떨어져 en 기본 문자열이 나오게 한다.
+            bundle = Self.resourceBundle
         }
     }
 
