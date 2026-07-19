@@ -88,8 +88,8 @@ struct OnboardingView: View {
                            "Abbreviations like ;sig become full snippets as you type.")
                 featureRow("square.and.arrow.down", "TextExpander migration",
                            "Import your existing groups and abbreviations in one click.")
-                featureRow("command.square", "Hotkey macros",
-                           "Global shortcuts that insert text, run scripts, or open apps.")
+                // Hotkey macros 소개는 뺀다 — 이 버전에서 그 기능을 감췄으므로, 온보딩이
+                // 도달할 수 없는 기능을 광고하면 안 된다.
                 featureRow("questionmark.text.page", "Fill-in forms",
                            "Snippets can pause and ask for names, amounts, or choices.")
             }
@@ -271,7 +271,7 @@ struct OnboardingView: View {
                 Text("Quick tips").font(.headline)
                 Text("• The menu bar ⚡ icon opens your snippet library and settings.")
                 Text("• Snippets with %filltext:…% pause and ask you to fill in the blanks.")
-                Text("• The Hotkeys tab adds global shortcuts for scripts, apps, and URLs.")
+                // Hotkeys 탭 안내는 뺀다 — 탭 자체를 감췄으므로 없는 탭을 가리키면 안 된다.
             }
             .font(.callout)
             .foregroundStyle(.secondary)

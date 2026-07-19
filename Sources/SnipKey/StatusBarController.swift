@@ -8,18 +8,21 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let openManager: () -> Void
     private let openOnboarding: () -> Void
     private let openSearch: () -> Void
+    private let openSettings: () -> Void
     private var statusItem: NSStatusItem!
 
     init(
         store: Store,
         openManager: @escaping () -> Void,
         openOnboarding: @escaping () -> Void,
-        openSearch: @escaping () -> Void
+        openSearch: @escaping () -> Void,
+        openSettings: @escaping () -> Void
     ) {
         self.store = store
         self.openManager = openManager
         self.openOnboarding = openOnboarding
         self.openSearch = openSearch
+        self.openSettings = openSettings
         super.init()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -73,6 +76,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         open.target = self
         menu.addItem(open)
 
+        // 설정으로 가는 두 번째 문. 표준 ⌘, 메뉴가 창을 띄우고 Settings 탭을 고르는데,
+        // 상태바에서도 같은 곳으로 바로 갈 수 있어야 발견 가능성이 올라간다.
+        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettingsTab), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
+
         let snippetCount = store.allSnippets.count
         let stats = NSMenuItem(
             title: "\(snippetCount) snippets · \(store.expansionCount) expansions",
@@ -106,6 +115,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func openInlineSearch() {
         openSearch()
+    }
+
+    @objc private func openSettingsTab() {
+        openSettings()
     }
 
     @objc private func openOnboardingWindow() {

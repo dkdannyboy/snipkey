@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import SnipKeyKit
 
@@ -10,6 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var managerWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var engineStartTimer: Timer?
+    /// 확장 횟수를 지켜보다 50배수마다 별표 프롬프트를 띄운다. 확장은 다른 앱에서
+    /// 일어나므로 창이 닫혀 있어도 관측이 살아 있어야 한다.
+    private var starPromptCancellable: AnyCancellable?
+    /// GitHub 저장소 주소. 별표 버튼이 여기로 브라우저를 연다.
+    private static let repoURL = URL(string: "https://github.com/dkdannyboy/snipkey")!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("launched from \(Bundle.main.bundlePath) — accessibility trusted: \(ExpansionEngine.hasAccessibilityPermission)")
@@ -20,7 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store: store,
             openManager: { [weak self] in self?.showManager() },
             openOnboarding: { [weak self] in self?.showOnboarding() },
-            openSearch: { [weak self] in self?.showInlineSearch() }
+            openSearch: { [weak self] in self?.showInlineSearch() },
+            openSettings: { [weak self] in self?.openSettings(nil) }
         )
 
         hotkeys.onInlineSearch = { [weak self] in self?.showInlineSearch() }
@@ -31,6 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !store.didFinishOnboarding {
             showOnboarding()
         }
+
+        startObservingStarPrompt()
 
         // Start the engine as soon as Accessibility permission is available,
         // whenever the user grants it.
@@ -69,6 +78,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func focusSearch(_ sender: Any?) {
         showManager()
         NotificationCenter.default.post(name: .snipKeyFocusSearch, object: nil)
+    }
+
+    @objc func openSettings(_ sender: Any?) {
+        showManager()
+        NotificationCenter.default.post(name: .snipKeyOpenSettings, object: nil)
+    }
+
+    // MARK: - Star prompt
+
+    /// 확장 횟수 변화를 구독한다. 결정은 순수 함수(StarPrompt)에 맡기고, 여기서는
+    /// 결과에 따라 창을 띄우기만 한다. 결정 로직을 모델 밖으로 뺀 것은 테스트가 닿게
+    /// 하기 위해서다 — NSAlert는 단위 테스트에서 돌릴 수 없다.
+    private func startObservingStarPrompt() {
+        starPromptCancellable = store.$expansionCount
+            .receive(on: RunLoop.main)
+            .sink { [weak self] count in
+                guard let self else { return }
+                guard StarPrompt.shouldPrompt(
+                    expansionCount: count,
+                    hasStarred: self.store.hasStarredOnGitHub,
+                    dismissedForever: self.store.starPromptDismissedForever,
+                    lastPromptedCount: self.store.starLastPromptedCount
+                ) else { return }
+                // 창을 실제로 띄우기 '전에' 못을 박는다. 그래야 같은 값에서 재실행하거나
+                // 초기값이 다시 흘러도 창이 두 번 뜨지 않는다.
+                self.store.starLastPromptedCount = count
+                self.presentStarPrompt(expansionCount: count)
+            }
+    }
+
+    private func presentStarPrompt(expansionCount: Int) {
+        // 확장은 다른 앱을 쓰는 중에 일어난다. 창을 앞으로 가져오지 않으면 뒤에 묻혀
+        // 사용자가 알림을 아예 못 본다.
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Enjoying SnipKey?"
+        alert.informativeText = "You've expanded \(expansionCount) snippets. If SnipKey saves you time, a star on GitHub helps others find it."
+        alert.addButton(withTitle: "Star on GitHub")   // 첫 버튼 = 기본(Return)
+        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: "Don't ask again")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            // 별표를 눌렀다고 보고 프롬프트를 영원히 멈춘다. 실제 별표는 브라우저에서.
+            store.hasStarredOnGitHub = true
+            NSWorkspace.shared.open(Self.repoURL)
+        case .alertThirdButtonReturn:
+            store.starPromptDismissedForever = true
+        default:
+            // "Later" — 아무것도 저장하지 않는다. 다음 50배수에서 다시 뜬다.
+            break
+        }
     }
 
     // MARK: - Windows

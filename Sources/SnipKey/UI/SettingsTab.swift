@@ -126,7 +126,8 @@ struct SettingsTab: View {
             Section {
                 LabeledContent("Groups", value: "\(store.groups.count)")
                 LabeledContent("Snippets", value: "\(store.allSnippets.count)")
-                LabeledContent("Hotkey macros", value: "\(store.macros.count)")
+                // Hotkey macros 통계는 뺀다 — 그 기능을 이 버전에서 감췄으므로,
+                // 감춘 기능의 개수를 설정에 노출하면 안 된다(store.macros 데이터는 그대로 둔다).
                 LabeledContent("Total expansions", value: "\(store.expansionCount)")
             } header: {
                 Text("Statistics")

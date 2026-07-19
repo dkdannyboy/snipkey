@@ -8,6 +8,10 @@ import AppKit
 extension Notification.Name {
     static let snipKeyNewSnippet = Notification.Name("snipkey.command.newSnippet")
     static let snipKeyFocusSearch = Notification.Name("snipkey.command.focusSearch")
+    // 설정은 지금껏 상태바 ⚡ → "Open SnipKey…" → Settings 탭 클릭으로만 닿을 수 있었다.
+    // 표준 ⌘,가 없으면 사용자는 설정이 있는 줄도 모른다. 이 알림으로 창을 띄우고
+    // Settings 탭을 고른다.
+    static let snipKeyOpenSettings = Notification.Name("snipkey.command.openSettings")
 }
 
 enum MainMenu {
@@ -28,8 +32,22 @@ enum MainMenu {
     private static func appMenuItem() -> NSMenuItem {
         let item = NSMenuItem()
         let menu = NSMenu(title: "SnipKey")
+        // ⌘,는 창이 닫혀 있을 때도 눌린다. 그 순간엔 키 윈도우가 없어 자동 검증이
+        // nil-타깃 항목을 꺼버릴 수 있으므로(File 메뉴가 같은 이유로 끈다), 자동 활성화를
+        // 꺼서 Settings…가 항상 살아 있게 한다.
+        menu.autoenablesItems = false
 
         menu.addItem(withTitle: "About SnipKey", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+
+        // 타깃을 nil로 둔다 — AppKit이 응답자 사슬을 걸어 앱 델리게이트에 닿게 하고,
+        // 그게 키 이퀴벌런트가 실제로 타는 경로다(newSnippet/focusSearch와 동일).
+        let settings = NSMenuItem(
+            title: "Settings…",
+            action: #selector(AppDelegate.openSettings(_:)),
+            keyEquivalent: ","
+        )
+        menu.addItem(settings)
         menu.addItem(.separator())
 
         let hide = NSMenuItem(title: "Hide SnipKey", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")

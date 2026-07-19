@@ -121,6 +121,11 @@ public final class Store: ObservableObject {
         public static let expansionCount = "SnipKey.device.expansionCount"
         public static let didFinishOnboarding = "SnipKey.device.didFinishOnboarding"
         public static let storeLocationPath = "SnipKey.storeLocationPath"
+        // GitHub 별표 프롬프트 상태. 확장 횟수와 마찬가지로 Mac마다 다르고(별표는 사람이
+        // 한 번 누르는 것), 동기화되는 문서에 들어가면 안 되므로 장치-로컬에 둔다.
+        public static let hasStarredOnGitHub = "SnipKey.device.hasStarredOnGitHub"
+        public static let starPromptDismissedForever = "SnipKey.device.starPromptDismissedForever"
+        public static let starLastPromptedCount = "SnipKey.device.starLastPromptedCount"
     }
 
     @Published public var groups: [SnippetGroup] { didSet { scheduleSave(); rebuildIndex() } }
@@ -132,6 +137,18 @@ public final class Store: ObservableObject {
     /// 두 번째 Mac에서도 온보딩은 처음부터 다시 돌아야 한다.
     @Published public var didFinishOnboarding: Bool {
         didSet { deviceDefaults.set(didFinishOnboarding, forKey: DeviceStateKey.didFinishOnboarding) }
+    }
+    /// 장치-로컬. 별표를 누른 순간부터 프롬프트는 영원히 멈춘다.
+    @Published public var hasStarredOnGitHub: Bool {
+        didSet { deviceDefaults.set(hasStarredOnGitHub, forKey: DeviceStateKey.hasStarredOnGitHub) }
+    }
+    /// 장치-로컬. "다시 묻지 않기"를 고르면 영원히 멈춘다.
+    @Published public var starPromptDismissedForever: Bool {
+        didSet { deviceDefaults.set(starPromptDismissedForever, forKey: DeviceStateKey.starPromptDismissedForever) }
+    }
+    /// 장치-로컬. 마지막으로 프롬프트를 띄운 확장 횟수. 같은 값에서 두 번 뜨는 것을 막는다.
+    @Published public var starLastPromptedCount: Int {
+        didSet { deviceDefaults.set(starLastPromptedCount, forKey: DeviceStateKey.starLastPromptedCount) }
     }
     @Published public private(set) var loadFailure: LoadFailure?
     /// 있어야 할 라이브러리가 아직 없다. 빈 라이브러리를 사용자의 진짜 것인 양
@@ -421,6 +438,11 @@ public final class Store: ObservableObject {
             key: DeviceStateKey.didFinishOnboarding,
             seed: loaded.fileDidFinishOnboarding
         )
+        // 별표 프롬프트 상태는 파일에서 시드하지 않는다 — 순수 장치-로컬 신상태다.
+        // 키가 없으면 bool은 false, integer는 0을 돌려주는데, 그게 곧 원하는 기본값이다.
+        self.hasStarredOnGitHub = deviceDefaults.bool(forKey: DeviceStateKey.hasStarredOnGitHub)
+        self.starPromptDismissedForever = deviceDefaults.bool(forKey: DeviceStateKey.starPromptDismissedForever)
+        self.starLastPromptedCount = deviceDefaults.integer(forKey: DeviceStateKey.starLastPromptedCount)
         rebuildIndex()
 
         self.watcher = watcherFactory(fileURL.deletingLastPathComponent())

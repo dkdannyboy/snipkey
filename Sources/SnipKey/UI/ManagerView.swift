@@ -5,16 +5,32 @@ import SnipKeyKit
 struct ManagerView: View {
     @EnvironmentObject var store: Store
 
+    /// 어느 탭을 보여줄지. ⌘,가 Settings 탭을 직접 고를 수 있으려면 선택 바인딩이
+    /// 있어야 한다(예전엔 바인딩이 없어 프로그램적으로 탭을 바꿀 수 없었다).
+    enum Tab: Hashable {
+        case snippets
+        case settings
+    }
+
+    @State private var selectedTab: Tab = .snippets
+
     var body: some View {
-        TabView {
+        // Hotkeys(단축키 매크로) 탭은 이 버전에서 감춘다 — 아직 미완성이고 테스트가 없다.
+        // HotkeysTab/HotkeyManager 코드는 나중에 다시 켤 수 있게 그대로 둔다(⌘/ 인라인
+        // 검색은 HotkeyManager가 계속 등록한다). 여기서 참조만 뗀다.
+        TabView(selection: $selectedTab) {
             SnippetsTab()
                 .tabItem { Label("Snippets", systemImage: "text.badge.plus") }
-            HotkeysTab()
-                .tabItem { Label("Hotkeys", systemImage: "command.square") }
+                .tag(Tab.snippets)
             SettingsTab()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(Tab.settings)
         }
         .frame(minWidth: 900, minHeight: 560)
+        // ⌘,는 창을 띄운 뒤 이 알림을 쏜다. 창이 이미 떠 있든 아니든 Settings 탭으로 간다.
+        .onReceive(NotificationCenter.default.publisher(for: .snipKeyOpenSettings)) { _ in
+            selectedTab = .settings
+        }
     }
 }
 
