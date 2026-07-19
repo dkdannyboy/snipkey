@@ -686,6 +686,10 @@ enum FillInKind: String, Identifiable {
 private struct FillInFormScaffold<Content: View>: View {
     @EnvironmentObject var loc: LocalizationManager
     let title: String
+    // 표현 불가능한 문자(이름/옵션의 ':'·'%', 기본값의 '%')가 있으면 삽입을 막는다.
+    // 조용히 문자를 지워 값을 망가뜨리는 대신, 폼이 Insert를 비활성화하고 인라인 경고를
+    // 띄워 사용자가 스스로 고치게 한다. 기본값 true라 기존 호출부는 그대로 동작한다.
+    var canInsert: Bool = true
     @ViewBuilder var content: () -> Content
     let onCancel: () -> Void
     let onInsert: () -> Void
@@ -700,10 +704,23 @@ private struct FillInFormScaffold<Content: View>: View {
                     .keyboardShortcut(.cancelAction)
                 Button(loc.s("fillinForm.insert"), action: onInsert)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!canInsert)
             }
         }
         .padding(18)
         .frame(minWidth: 380)
+    }
+}
+
+/// 필드 아래에 다는 작은 인라인 경고. 표현 불가능한 문자를 왜 못 쓰는지 사용자에게 알려
+/// 스스로 지우게 한다(조용히 바꾸지 않기 위한 핵심 UI).
+private struct FillInFieldWarning: View {
+    let message: String
+    var body: some View {
+        Text(message)
+            .font(.caption)
+            .foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -717,11 +734,16 @@ struct FillTextForm: View {
     @State private var name = "field"
     @State private var defaultValue = ""
 
+    private var nameOK: Bool { FillInBuilder.nameOrOptionIsRepresentable(name) }
+    private var defaultOK: Bool { FillInBuilder.defaultValueIsRepresentable(defaultValue) }
+
     var body: some View {
-        FillInFormScaffold(title: loc.s("fillinForm.text.title")) {
+        FillInFormScaffold(title: loc.s("fillinForm.text.title"), canInsert: nameOK && defaultOK) {
             Form {
                 TextField(loc.s("fillinForm.field.name"), text: $name)
+                if !nameOK { FillInFieldWarning(message: loc.s("fillinForm.warn.name")) }
                 TextField(loc.s("fillinForm.field.default"), text: $defaultValue)
+                if !defaultOK { FillInFieldWarning(message: loc.s("fillinForm.warn.default")) }
             }
         } onCancel: {
             dismiss()
@@ -741,11 +763,16 @@ struct FillAreaForm: View {
     @State private var name = "notes"
     @State private var defaultValue = ""
 
+    private var nameOK: Bool { FillInBuilder.nameOrOptionIsRepresentable(name) }
+    private var defaultOK: Bool { FillInBuilder.defaultValueIsRepresentable(defaultValue) }
+
     var body: some View {
-        FillInFormScaffold(title: loc.s("fillinForm.area.title")) {
+        FillInFormScaffold(title: loc.s("fillinForm.area.title"), canInsert: nameOK && defaultOK) {
             Form {
                 TextField(loc.s("fillinForm.field.name"), text: $name)
+                if !nameOK { FillInFieldWarning(message: loc.s("fillinForm.warn.name")) }
                 TextField(loc.s("fillinForm.field.default"), text: $defaultValue)
+                if !defaultOK { FillInFieldWarning(message: loc.s("fillinForm.warn.default")) }
             }
         } onCancel: {
             dismiss()
@@ -779,22 +806,35 @@ struct FillPopupForm: View {
         options.map(\.text).filter { !$0.isEmpty }
     }
 
+    private var nameOK: Bool { FillInBuilder.nameOrOptionIsRepresentable(name) }
+    // 옵션에 표현 불가능한 문자가 하나라도 있으면 삽입을 막는다. 기본값은 Picker로 옵션
+    // 중에서만 고르므로, 옵션이 깨끗하면 기본값도 깨끗하다 → 옵션 검증이 기본값까지 지킨다.
+    private var optionsOK: Bool {
+        options.allSatisfy { FillInBuilder.nameOrOptionIsRepresentable($0.text) }
+    }
+
     var body: some View {
-        FillInFormScaffold(title: loc.s("fillinForm.popup.title")) {
+        FillInFormScaffold(title: loc.s("fillinForm.popup.title"), canInsert: nameOK && optionsOK) {
             Form {
                 TextField(loc.s("fillinForm.field.name"), text: $name)
+                if !nameOK { FillInFieldWarning(message: loc.s("fillinForm.warn.name")) }
 
                 Section(loc.s("fillinForm.field.options")) {
                     ForEach($options) { $row in
-                        HStack {
-                            TextField(loc.s("fillinForm.field.options"), text: $row.text)
-                            Button {
-                                options.removeAll { $0.id == row.id }
-                            } label: {
-                                Image(systemName: "minus.circle")
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                TextField(loc.s("fillinForm.field.options"), text: $row.text)
+                                Button {
+                                    options.removeAll { $0.id == row.id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(options.count <= 1) // 최소 한 행은 남긴다.
                             }
-                            .buttonStyle(.borderless)
-                            .disabled(options.count <= 1) // 최소 한 행은 남긴다.
+                            if !FillInBuilder.nameOrOptionIsRepresentable(row.text) {
+                                FillInFieldWarning(message: loc.s("fillinForm.warn.option"))
+                            }
                         }
                     }
                     Button {
@@ -832,10 +872,15 @@ struct FillPartForm: View {
     @State private var includeByDefault = true
     @State private var content = ""
 
+    // 이름만 검증한다. 내용(content)은 정제하지 않으며 다른 매크로를 담을 수 있으므로
+    // ':'·'%'가 정상적으로 들어갈 수 있다 → 검증 대상이 아니다.
+    private var nameOK: Bool { FillInBuilder.nameOrOptionIsRepresentable(name) }
+
     var body: some View {
-        FillInFormScaffold(title: loc.s("fillinForm.part.title")) {
+        FillInFormScaffold(title: loc.s("fillinForm.part.title"), canInsert: nameOK) {
             Form {
                 TextField(loc.s("fillinForm.field.name"), text: $name)
+                if !nameOK { FillInFieldWarning(message: loc.s("fillinForm.warn.name")) }
                 Toggle(loc.s("fillinForm.field.includeByDefault"), isOn: $includeByDefault)
                 Section(loc.s("fillinForm.field.contents")) {
                     TextEditor(text: $content)

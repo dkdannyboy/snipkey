@@ -138,11 +138,21 @@ public enum MacroParser {
             var name = ""
             var defaultValue = ""
             var options: [String] = []
-            for part in body.components(separatedBy: ":") {
+            // default= 값은 탐욕적으로 읽는다: default= 경계 이후 본문 끝까지(콜론 포함) 전부가
+            // 기본값이다. URL의 "https://", 시각의 "10:30"처럼 값에 든 ':'가 살아남아야 하기
+            // 때문 — 예전처럼 본문 전체를 ':'로 쪼개면 그 콜론들이 옵션으로 잘려 나가 값이
+            // 조용히 깨진다. 이름·옵션·width/height는 default= '앞부분'에서만 ':'로 쪼갠다.
+            // '앞부분'에는 default=가 없으므로 기존 콘텐츠(콜론 없는 기본값)는 동일하게 파싱된다.
+            let beforeDefault: String
+            if let clause = rangeOfDefaultClause(in: body) {
+                defaultValue = String(body[clause.upperBound...])
+                beforeDefault = String(body[..<clause.lowerBound])
+            } else {
+                beforeDefault = body
+            }
+            for part in beforeDefault.components(separatedBy: ":") {
                 if part.hasPrefix("name=") {
                     name = String(part.dropFirst("name=".count))
-                } else if part.hasPrefix("default=") {
-                    defaultValue = String(part.dropFirst("default=".count))
                 } else if part.hasPrefix("width=") || part.hasPrefix("height=") {
                     continue // layout hints — ignored
                 } else if !part.isEmpty {
@@ -161,6 +171,20 @@ public enum MacroParser {
         default:
             return nil
         }
+    }
+
+    /// 채우기 본문에서 default= 절의 위치를 찾는다. 반환 범위의 lowerBound는 절 앞의
+    /// 경계(':' 또는 본문 시작)이고 upperBound는 "default=" 바로 뒤다. 그래서 lowerBound
+    /// 앞은 이름/옵션으로, upperBound 뒤 전체는 (콜론을 포함해) 기본값으로 나뉜다.
+    /// 첫 번째 default=만 절로 인정한다 — 뒤에 또 나오는 "default="는 값의 일부로 본다.
+    private static func rangeOfDefaultClause(in body: String) -> Range<String.Index>? {
+        let token = "default="
+        // 이름 없이 본문이 곧장 default=로 시작하는 경우(예: "default=foo").
+        if body.hasPrefix(token) {
+            return body.startIndex..<body.index(body.startIndex, offsetBy: token.count)
+        }
+        // 일반적인 경우: 파트 경계인 ':' 뒤에 default=가 온다.
+        return body.range(of: ":" + token)
     }
 
     // MARK: - Nested snippets

@@ -37,6 +37,41 @@ final class MacroParserTests: XCTestCase {
         XCTAssertEqual(rendered.text, "world")
     }
 
+    func testFillTextDefaultWithColonURL() {
+        // 회귀 방지: 예전엔 본문을 ':'로 통째로 쪼개 "https"만 남고 "//example.com"이
+        // 옵션으로 잘려 나갔다. 파서가 default=를 탐욕적으로 읽으므로 URL 전체가 살아야 한다.
+        let tokens = MacroParser.parse("%filltext:name=url:default=https://example.com%")
+        XCTAssertEqual(tokens, [.fillText(name: "url", defaultValue: "https://example.com")])
+    }
+
+    func testFillTextDefaultWithColonTime() {
+        // 시각 "10:30"의 콜론도 값에 그대로 남아야 한다.
+        let tokens = MacroParser.parse("%filltext:name=t:default=10:30%")
+        XCTAssertEqual(tokens, [.fillText(name: "t", defaultValue: "10:30")])
+    }
+
+    func testFillAreaDefaultWithColon() {
+        let tokens = MacroParser.parse("%fillarea:name=n:default=a:b:c%")
+        XCTAssertEqual(tokens, [.fillArea(name: "n", defaultValue: "a:b:c")])
+    }
+
+    func testFillPopupOptionsBeforeGreedyDefault() {
+        // 옵션은 default= '앞부분'에서만 쪼개지고, 기본값은 콜론을 담을 수 있다.
+        let tokens = MacroParser.parse("%fillpopup:name=p:Basic:Pro:default=https://a.b%")
+        XCTAssertEqual(
+            tokens,
+            [.fillPopup(name: "p", options: ["Basic", "Pro"], defaultValue: "https://a.b")]
+        )
+    }
+
+    func testExistingContentWithPlainDefaultUnchanged() {
+        // 콜론 없는 기존 콘텐츠는 동작이 동일해야 한다(하위 호환).
+        XCTAssertEqual(
+            MacroParser.parse("%filltext:name=x:default=y%"),
+            [.fillText(name: "x", defaultValue: "y")]
+        )
+    }
+
     func testFillPartIncludedByDefault() {
         let content = "A%fillpart:name=p:default=yes% optional%fillpartend% B"
         let tokens = MacroParser.parse(content)

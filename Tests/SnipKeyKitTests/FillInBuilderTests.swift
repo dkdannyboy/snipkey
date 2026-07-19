@@ -104,10 +104,59 @@ final class FillInBuilderTests: XCTestCase {
         XCTAssertEqual(MacroParser.parse(s), [.fillPopup(name: "n", options: ["ab"], defaultValue: "")])
     }
 
-    func testPercentInDefaultIsSanitized() {
-        // 기본값의 '%'는 매크로 본문을 조기에 끝내 버리므로 제거해야 왕복이 성립한다.
+    func testPercentInDefaultIsSanitizedAsLastResort() {
+        // '%'는 매크로 종결자라 기본값에 담을 수 없다. 폼은 검증으로 이 입력을 먼저 막지만,
+        // 어떤 경로로든 '%'가 빌더에 닿으면 조용히 깨진 매크로를 만드는 대신 마지막 방어선으로
+        // 제거한다. ':'와 달리 '%'는 여전히 제거된다.
         let s = FillInBuilder.fillText(name: "n", defaultValue: "50%off")
         XCTAssertEqual(s, "%filltext:name=n:default=50off%")
         XCTAssertEqual(MacroParser.parse(s), [.fillText(name: "n", defaultValue: "50off")])
+    }
+
+    // MARK: - Colon in default now survives (Part A)
+
+    func testFillTextDefaultWithColonRoundTrips() {
+        // 빌더가 만든 URL 기본값이 파서로 다시 읽었을 때 같은 토큰으로 왕복해야 한다.
+        // 예전엔 ':'가 제거돼 "https//example.com"으로 망가졌다.
+        let s = FillInBuilder.fillText(name: "url", defaultValue: "https://example.com")
+        XCTAssertEqual(s, "%filltext:name=url:default=https://example.com%")
+        XCTAssertEqual(MacroParser.parse(s), [.fillText(name: "url", defaultValue: "https://example.com")])
+    }
+
+    func testFillTextDefaultWithTimeColonRoundTrips() {
+        let s = FillInBuilder.fillText(name: "t", defaultValue: "10:30")
+        XCTAssertEqual(s, "%filltext:name=t:default=10:30%")
+        XCTAssertEqual(MacroParser.parse(s), [.fillText(name: "t", defaultValue: "10:30")])
+    }
+
+    func testFillAreaDefaultWithColonRoundTrips() {
+        let s = FillInBuilder.fillArea(name: "n", defaultValue: "a:b:c")
+        XCTAssertEqual(s, "%fillarea:name=n:default=a:b:c%")
+        XCTAssertEqual(MacroParser.parse(s), [.fillArea(name: "n", defaultValue: "a:b:c")])
+    }
+
+    func testFillPopupDefaultWithColonRoundTrips() {
+        let s = FillInBuilder.fillPopup(name: "p", options: ["A", "B"], defaultValue: "https://a.b")
+        XCTAssertEqual(s, "%fillpopup:name=p:A:B:default=https://a.b%")
+        XCTAssertEqual(
+            MacroParser.parse(s),
+            [.fillPopup(name: "p", options: ["A", "B"], defaultValue: "https://a.b")]
+        )
+    }
+
+    // MARK: - Validation helpers (Part B)
+
+    func testValidationFlagsPercentInDefault() {
+        // '%'가 든 기본값은 표현 불가 → 폼이 이걸로 Insert를 막는다.
+        XCTAssertFalse(FillInBuilder.defaultValueIsRepresentable("50%off"))
+        // ':'는 이제 허용된다 → 경고하지 않아야 한다.
+        XCTAssertTrue(FillInBuilder.defaultValueIsRepresentable("https://example.com"))
+        XCTAssertTrue(FillInBuilder.defaultValueIsRepresentable("clean value"))
+    }
+
+    func testValidationFlagsColonOrPercentInNameOrOption() {
+        XCTAssertFalse(FillInBuilder.nameOrOptionIsRepresentable("a:b"))
+        XCTAssertFalse(FillInBuilder.nameOrOptionIsRepresentable("a%b"))
+        XCTAssertTrue(FillInBuilder.nameOrOptionIsRepresentable("clean"))
     }
 }

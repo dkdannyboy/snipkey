@@ -122,6 +122,9 @@
 "fillinForm.option.add" = "옵션 추가";
 "fillinForm.cancel" = "취소";
 "fillinForm.insert" = "삽입";
+"fillinForm.warn.default" = "“%”를 지우세요 — 매크로를 끝내는 문자라 값에 넣을 수 없습니다.";
+"fillinForm.warn.name" = "“:”와 “%”를 지우세요 — 매크로 구분자라 이름에 넣을 수 없습니다.";
+"fillinForm.warn.option" = "“:”와 “%”를 지우세요 — 매크로 구분자라 옵션에 넣을 수 없습니다.";
 
 /* MARK: 설정 — 일반 */
 "settings.general.header" = "일반";

@@ -122,6 +122,9 @@
 "fillinForm.option.add" = "選択肢を追加";
 "fillinForm.cancel" = "キャンセル";
 "fillinForm.insert" = "挿入";
+"fillinForm.warn.default" = "「%」を削除してください — マクロを終了する文字なので値に含められません。";
+"fillinForm.warn.name" = "「:」と「%」を削除してください — マクロの区切り文字なので名前に含められません。";
+"fillinForm.warn.option" = "「:」と「%」を削除してください — マクロの区切り文字なので選択肢に含められません。";
 
 /* MARK: 設定 — 一般 */
 "settings.general.header" = "一般";

@@ -123,6 +123,9 @@
 "fillinForm.option.add" = "Add option";
 "fillinForm.cancel" = "Cancel";
 "fillinForm.insert" = "Insert";
+"fillinForm.warn.default" = "Remove “%” — it ends the macro, so it can't be part of a value.";
+"fillinForm.warn.name" = "Remove “:” and “%” — they're macro separators and can't be part of a name.";
+"fillinForm.warn.option" = "Remove “:” and “%” — they're macro separators and can't be part of an option.";
 
 /* MARK: Settings — General */
 "settings.general.header" = "General";
