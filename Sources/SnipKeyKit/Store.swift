@@ -427,16 +427,25 @@ public final class Store: ObservableObject {
         self._lastKnownContentDigest = loaded.contentDigest
 
         // 장치-로컬 상태 시드. 기존 사용자의 store.json에는 진짜 평생 확장 횟수가
-        // 들어 있다. 업그레이드하면서 그걸 0으로 리셋하지 않는다.
+        // 들어 있다. 업그레이드하면서 그걸 0으로 리셋하지 않는다. 확장 횟수는 무해한
+        // 평생 통계라 어느 위치에서든 시드해도 안전하다(위치 무관 유지).
         self.expansionCount = Self.seededInt(
             deviceDefaults,
             key: DeviceStateKey.expansionCount,
             seed: loaded.fileExpansionCount
         )
+        // 온보딩 시드는 **위치 인식**이어야 한다. 파일의 didFinishOnboarding은 그 Mac이
+        // 접근성을 승인했다는 뜻인데, 그건 장치-로컬 사실이라 다른 Mac의 파일 값을
+        // 따르면 안 된다. 동기화 위치(expectsExistingLibrary:true)에서 시드하면, 공유
+        // 라이브러리를 방금 받은 새 Mac이 자기 접근성을 승인하지도 않았는데 온보딩이
+        // 억제된다. 그래서 로컬 기본(expectsExistingLibrary:false)에서만 시드한다 —
+        // 그 승계의 유일한 목적은 pre-장치-로컬 빌드에서 업그레이드한 기존 사용자가
+        // 자기 로컬 store.json의 true를 잃고 재-온보딩되지 않게 하는 것뿐이다.
+        let onboardingSeed = location.expectsExistingLibrary ? nil : loaded.fileDidFinishOnboarding
         self.didFinishOnboarding = Self.seededBool(
             deviceDefaults,
             key: DeviceStateKey.didFinishOnboarding,
-            seed: loaded.fileDidFinishOnboarding
+            seed: onboardingSeed
         )
         // 별표 프롬프트 상태는 파일에서 시드하지 않는다 — 순수 장치-로컬 신상태다.
         // 키가 없으면 bool은 false, integer는 0을 돌려주는데, 그게 곧 원하는 기본값이다.
@@ -904,9 +913,13 @@ public final class Store: ObservableObject {
 
     /// REQ-LOC-004. 기존 동기화 파일을 가리킨다. 먼저 로컬 라이브러리를 타임스탬프
     /// 백업으로 내보내고(회수 가능하게), 대상 파일은 **절대 덮지 않으며**, 대상의
-    /// 내용을 채택한다. 그리고 온보딩 완료 플래그를 지운다 — 두 번째 Mac에서 온보딩이
-    /// 다시 떠야 하는데, 파일의 didFinishOnboarding:true가 빈 UserDefaults를 시드하면
-    /// 잘못 억제되기 때문이다 (M1/M2 보고서가 M4 의무로 명시한 항목).
+    /// 내용을 채택한다. 온보딩 완료 플래그는 **절대 건드리지 않는다** — 그것은
+    /// 장치-로컬(이 Mac이 접근성을 스스로 승인했는가)이라 공유 라이브러리를 채택하는
+    /// 것과 무관하다. 온보딩이 아직인 새 Mac은 자기 장치 키가 false라 어차피 온보딩이
+    /// 뜨므로 여기서 false로 못 박을 이유가 없고, 못 박으면 이미 설정을 마친 Mac에서
+    /// 링크했을 때 온보딩이 다시 떠 버린다(사용자가 겪은 버그). 파일의
+    /// didFinishOnboarding:true가 새 Mac의 온보딩을 억제하던 문제는 init의 시드 분기를
+    /// 위치 인식으로 바꿔 해결한다(동기화 파일에서는 시드하지 않는다).
     @discardableResult
     public func linkToSnippets(at target: URL) -> RelocationResult {
         // 롤백 지점을 먼저 잡는다. 대상 채택이 나쁜 로드로 판명되면 여기로 되돌려
@@ -927,9 +940,8 @@ public final class Store: ObservableObject {
         switch relocate(to: candidate) {
         case .clean:
             deviceDefaults.set(target.path, forKey: DeviceStateKey.storeLocationPath)
-            // 온보딩 플래그를 명시적으로 내린다. 이 값이 UserDefaults에 존재하면 다음
-            // 실행의 시드 분기가 파일 값(true)으로 덮어쓰지 않아, 온보딩이 다시 뜬다.
-            didFinishOnboarding = false
+            // 온보딩 플래그는 손대지 않는다. 장치-로컬이라 링크와 무관하고, false로
+            // 내리면 이미 온보딩을 마친 이 Mac이 재-온보딩된다(사용자 버그).
             let message = localBackup.map { "이전 로컬 스니펫을 \($0.lastPathComponent)에 백업했습니다." }
             return RelocationResult(success: true, backupURL: localBackup, message: message, activeLocation: fileURL)
         case .loadFailure(let msg):

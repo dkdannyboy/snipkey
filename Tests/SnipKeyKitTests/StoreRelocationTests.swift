@@ -92,8 +92,9 @@ final class StoreRelocationTests: XCTestCase {
     // MARK: - AC-CORE-007 블록 2 — "Link to Snippets…"
 
     /// 두 번째 Mac. 로컬 5개를 백업하고, 331개 파일을 채택하되 그 파일을 절대 덮지
-    /// 않는다. 그리고 온보딩 완료 플래그를 지운다 (M4 의무).
-    func testLinkToSnippetsBacksUpLocalNeverOverwritesTargetAndResetsOnboarding() throws {
+    /// 않는다. 그리고 이미 이 Mac에서 마친 온보딩 플래그는 **건드리지 않는다**.
+    /// (사용자 버그 재현: 이미 온보딩을 마친 주 Mac에서 링크하면 온보딩이 다시 뜬다.)
+    func testLinkToSnippetsBacksUpLocalNeverOverwritesTargetAndKeepsOnboardingState() throws {
         let localDir = try makeDir("local")
         let localFile = localDir.appendingPathComponent("store.json")
         try write(StoreData(groups: library("Local", count: 5)), to: localFile)
@@ -122,43 +123,71 @@ final class StoreRelocationTests: XCTestCase {
         XCTAssertEqual(try snippetCount(backup), 5, "백업에 로컬 5개가 담겨야 한다")
         XCTAssertNotNil(result.message, "백업 경로가 사용자에게 표시돼야 한다")
 
-        // M4 의무 — 온보딩 플래그가 지워져야 두 번째 Mac에서 온보딩이 다시 뜬다.
-        XCTAssertFalse(store.didFinishOnboarding)
-        XCTAssertEqual(defaults.object(forKey: Store.DeviceStateKey.didFinishOnboarding) as? Bool, false)
+        // 핵심 불변식 — 링크는 온보딩 플래그를 건드리면 안 된다. didFinishOnboarding은
+        // 장치-로컬(이 Mac이 접근성을 스스로 승인했는가)이라, 이미 설정을 마친 Mac이
+        // 공유 라이브러리를 채택했다고 온보딩을 다시 띄우면 안 된다. 새 Mac은 자기
+        // 장치 키가 false라 어차피 온보딩이 뜨므로, 여기서 false로 못 박을 이유가 없고,
+        // 못 박으면 이미 셋업된 Mac까지 재-온보딩된다(사용자가 겪은 버그).
+        XCTAssertTrue(store.didFinishOnboarding, "이미 온보딩을 마친 Mac은 링크 후에도 온보딩 상태를 유지해야 한다")
+        XCTAssertEqual(defaults.object(forKey: Store.DeviceStateKey.didFinishOnboarding) as? Bool, true)
 
         XCTAssertEqual(store.allSnippets.count, 331)
         XCTAssertEqual(defaults.string(forKey: Store.DeviceStateKey.storeLocationPath), syncFile.path)
     }
 
-    /// 두 번째 Mac 재실행 시뮬레이션: 링크가 온보딩 플래그를 false로 못 박았으므로,
-    /// 다음 실행이 파일의 didFinishOnboarding:true를 시드 분기로 덮어쓰지 않는다.
-    func testAfterLinkNextLaunchDoesNotSuppressOnboardingFromFileValue() throws {
-        let localDir = try makeDir("local")
-        let localFile = localDir.appendingPathComponent("store.json")
-        try write(StoreData(groups: library("Local", count: 5)), to: localFile)
-
-        let defaults = makeDefaults()
-        let store = Store(
-            location: Store.Location(fileURL: localFile, expectsExistingLibrary: false),
-            deviceDefaults: defaults, localSupportDirectory: localDir
-        )
-
+    /// 온보딩 시드의 위치 인식 — 이 버그의 핵심인 두 방향을 한자리에서 못 박는다.
+    ///
+    /// 방향 1 (동기화 파일은 시드하지 않는다): 아직 자기 접근성을 승인 안 한 Mac(장치 키
+    /// 부재)이 didFinishOnboarding:true인 **동기화 파일**을 가리키면, 그 파일 값은 장치
+    /// 플래그를 시드하지 않는다 — 온보딩이 떠야 한다. (동기화 파일이 새 Mac의 온보딩을
+    /// 억제하던 문제. 이제 링크가 플래그를 false로 못 박지 않으므로, 억제 차단은 오직
+    /// 위치 인식 시드가 담당한다.)
+    ///
+    /// 방향 2 (로컬 기본은 시드한다): 자기 **로컬 기본** store.json에 true가 있고 장치
+    /// 키가 부재인 Mac은 시드된다 — pre-장치-로컬 빌드에서 업그레이드한 기존 사용자가
+    /// 온보딩을 다시 보지 않게 하는 승계.
+    func testOnboardingSeedIsLocalDefaultOnlyNotSyncedFile() throws {
+        // 방향 1 — 동기화 파일은 온보딩을 억제하지 않는다. 갓 셋업하는 Mac은 아직
+        // 로컬 store.json이 없고(장치 키 부재), 자기 접근성도 승인 안 했다. 그 Mac이
+        // didFinishOnboarding:true인 **동기화 파일**을 가리켜도 온보딩이 떠야 한다.
+        // (로컬 파일을 두면 그 파일의 기본 false가 장치 키를 미리 못 박아 시드 분기를
+        // 가리므로, 진짜 첫 실행처럼 로컬 파일 없이 재현한다.)
         let syncDir = try makeDir("sync")
         let syncFile = syncDir.appendingPathComponent("shared.json")
         var onboardedSettings = AppSettings()
         onboardedSettings.didFinishOnboarding = true // Mac A가 온보딩을 마친 파일
         try write(StoreData(groups: library("Shared", count: 331), settings: onboardedSettings), to: syncFile)
 
-        _ = store.linkToSnippets(at: syncFile)
+        let freshDir = try makeDir("fresh") // 로컬 store.json 없음 = 아직 온보딩 안 한 Mac
+        let freshDefaults = makeDefaults()  // 장치 키 부재
+        freshDefaults.set(syncFile.path, forKey: Store.DeviceStateKey.storeLocationPath)
 
-        // 다음 실행: 같은 UserDefaults suite로 새 Store를 만든다.
         let relaunched = Store(
-            location: Store.resolveLocation(environment: [:], defaults: defaults),
-            deviceDefaults: defaults, localSupportDirectory: localDir
+            location: Store.resolveLocation(environment: [:], defaults: freshDefaults),
+            deviceDefaults: freshDefaults, localSupportDirectory: freshDir
         )
+        XCTAssertTrue(relaunched.isUsingConfiguredLocation, "동기화 포인터가 활성 위치여야 한다")
+        XCTAssertEqual(relaunched.allSnippets.count, 331, "동기화 라이브러리를 채택해야 한다")
         XCTAssertFalse(
             relaunched.didFinishOnboarding,
-            "링크가 플래그를 false로 못 박았으므로 파일의 true가 온보딩을 억제하면 안 된다"
+            "동기화 파일의 true는 아직 접근성을 승인 안 한 Mac의 온보딩을 시드/억제하면 안 된다"
+        )
+
+        // 방향 2 — 로컬 기본은 여전히 시드한다(업그레이드 승계).
+        let upgradeDir = try makeDir("upgrade")
+        let upgradeFile = upgradeDir.appendingPathComponent("store.json")
+        var upgradeSettings = AppSettings()
+        upgradeSettings.didFinishOnboarding = true
+        try write(StoreData(groups: library("Upgrade", count: 3), settings: upgradeSettings), to: upgradeFile)
+
+        let upgradeDefaults = makeDefaults() // 장치 키 부재
+        let upgraded = Store(
+            location: Store.Location(fileURL: upgradeFile, expectsExistingLibrary: false),
+            deviceDefaults: upgradeDefaults, localSupportDirectory: upgradeDir
+        )
+        XCTAssertTrue(
+            upgraded.didFinishOnboarding,
+            "로컬 기본 store.json의 true는 시드돼야 한다 — 업그레이드한 기존 사용자가 재-온보딩되면 안 된다"
         )
     }
 

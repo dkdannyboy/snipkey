@@ -413,10 +413,11 @@ final class StoreSyncTests: XCTestCase {
         XCTAssertEqual(relaunched.expansionCount, 4201)
     }
 
-    /// 온보딩 완료 여부도 같은 방식으로 승계된다. 다만 새 Mac에서는 (UserDefaults가
-    /// 비어 있고 라이브러리를 방금 받았으므로) 파일 값을 따라 시드된다는 점은
-    /// 알려진 한계다 — REQ-DEV-003의 목적은 M4의 "Link to Snippets…" 경로에서
-    /// 달성된다. 여기서는 기존 사용자가 온보딩을 다시 보지 않는 것만 못 박는다.
+    /// 온보딩 완료 여부는 **로컬 기본** store.json에서만 승계된다(업그레이드 연속성).
+    /// 이 경로가 그 유일한 목적이다: pre-장치-로컬 빌드에서 올라온 기존 사용자가
+    /// 자기 로컬 파일의 true를 잃고 재-온보딩되지 않게 한다. 동기화 파일에서는 시드가
+    /// 위치 인식으로 차단되므로(새 Mac이 남의 온보딩을 물려받지 않는다), 여기서 다루는
+    /// 로컬 기본 승계와 서로 충돌하지 않는다 (StoreRelocationTests의 위치 인식 시드 참고).
     func testOnboardingFlagIsSeededFromTheExistingFile() throws {
         let file = scratchPath()
         let defaults = makeDefaults()
