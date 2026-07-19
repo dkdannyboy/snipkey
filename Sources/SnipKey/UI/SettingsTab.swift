@@ -121,6 +121,10 @@ struct SettingsTab: View {
                     Button(loc.s("settings.data.export")) { exportSnippets() }
                     Button(loc.s("settings.data.openLog")) { NSWorkspace.shared.open(Log.fileURL) }
                 }
+                Text(loc.s("settings.data.help"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let importMessage {
                     Text(importMessage)
                         .font(.caption)
@@ -185,6 +189,18 @@ struct SettingsTab: View {
         Text(loc.s("settings.sync.help"))
             .font(.caption)
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        // 다중 Mac 설정을 헷갈리지 않게 단계로 안내한다: 한쪽은 저장, 다른 쪽은 연결.
+        Text(loc.s("settings.sync.steps"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        Text(loc.s("settings.sync.caveat"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
         if let syncMessage {
             Text(syncMessage)

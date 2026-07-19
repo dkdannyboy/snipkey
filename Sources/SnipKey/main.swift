@@ -68,6 +68,41 @@ if let flagIndex = arguments.firstIndex(of: "--import-te") {
     }
 }
 
+// 조립된 앱 번들에서 현지화 리소스가 실제로 로드되는지 검사하고 종료한다.
+// 1.2.0이 실행 즉시 크래시했다 — LocalizationManager.init → Bundle.module이 리소스
+// 번들을 못 찾아 fatalError. 설치본에서만 재현돼, "번들을 직접 열어보는" 우회 검증은
+// 통과하고 실제 앱 실행 경로만 죽었다. 그래서 CI가 조립한 번들을 이 플래그로 직접
+// 실행해, 진짜 LocalizationManager 코드로 세 언어가 키가 아닌 번역으로 해석되는지
+// 본다. GUI 세션이 필요 없어 헤드리스 러너에서도 돈다.
+if arguments.contains("--selfcheck") {
+    let suite = UserDefaults(suiteName: "snipkey.selfcheck") ?? .standard
+    suite.removePersistentDomain(forName: "snipkey.selfcheck")
+    let loc = LocalizationManager(deviceDefaults: suite)
+
+    var failures: [String] = []
+    var resolved: [AppLanguage: String] = [:]
+    for lang in [AppLanguage.en, .ko, .ja] {
+        loc.language = lang
+        let v = loc.s("tab.snippets")
+        resolved[lang] = v
+        // 키 그대로면 리소스 번들을 못 잡고 .main 폴백으로 떨어진 것이다.
+        if v == "tab.snippets" {
+            failures.append("\(lang.rawValue): resource bundle not loaded (got the key back)")
+        }
+    }
+    // 언어별로 다른 테이블이 실제로 로드됐는지 — ko/ja가 en과 같으면 한 언어만 로드된 것.
+    if let en = resolved[.en], resolved[.ko] == en { failures.append("ko table did not load (== en)") }
+    if let en = resolved[.en], resolved[.ja] == en { failures.append("ja table did not load (== en)") }
+
+    if failures.isEmpty {
+        print("selfcheck OK — en=\(resolved[.en] ?? "?") ko=\(resolved[.ko] ?? "?") ja=\(resolved[.ja] ?? "?")")
+        exit(0)
+    } else {
+        FileHandle.standardError.write(Data(("selfcheck FAILED:\n  " + failures.joined(separator: "\n  ") + "\n").utf8))
+        exit(1)
+    }
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

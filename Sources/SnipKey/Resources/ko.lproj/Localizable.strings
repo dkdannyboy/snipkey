@@ -270,3 +270,8 @@
 "search.hint.jump" = "바로 가기";
 "search.hint.close" = "닫기";
 "search.count" = "%d / %d개";
+
+/* MARK: Settings — Sync 안내 (다중 Mac 설정) */
+"settings.sync.steps" = "다른 Mac에서 같은 스니펫을 쓰려면:\n1. 이 Mac에서 “다른 위치에 스니펫 저장…”을 눌러 iCloud Drive(또는 동기화되는 폴더)의 위치를 고르세요.\n2. 다른 Mac에서 “스니펫에 연결…”을 눌러 바로 그 파일을 고르세요.\n어느 Mac에서 고쳐도 클라우드를 통해 다른 Mac으로 전달됩니다.";
+"settings.sync.caveat" = "Mac 사이 동기화에는 클라우드가 잠깐 시간이 걸리니 양쪽에서 동시에 편집하지 마세요. 두 Mac이 동시에 라이브러리를 바꾸면 SnipKey는 어느 쪽도 잃지 않고 양쪽 버전을 보존합니다.";
+"settings.data.help" = "가져오기는 스니펫을 라이브러리에 합칩니다 — 기존 것을 지우지 않습니다. 내보내기는 백업으로 보관할 사본을 저장합니다.";

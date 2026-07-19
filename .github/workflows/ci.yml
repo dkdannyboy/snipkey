@@ -32,3 +32,16 @@ jobs:
       # fine for a build check, not something you could ship.
       - name: Assemble app bundle
         run: ./scripts/build-app.sh
+
+      # Actually launch the assembled bundle and confirm localization loads.
+      # 1.2.0 shipped a crash that only reproduced in the assembled/installed app
+      # (Bundle.module could not find the resource bundle), which building + a
+      # bypass check both missed. --selfcheck runs the real LocalizationManager
+      # against the real bundle and exits non-zero if strings don't resolve.
+      - name: Localization smoke test
+        run: |
+          # 배포된 앱처럼 자기 번들(Contents/Resources)에서만 로드하도록, 빌드
+          # 디렉터리의 리소스 번들을 치운다. Bundle.module은 .build 경로도 뒤지므로,
+          # 안 치우면 개발/CI 머신에선 거기서 찾아 이 크래시 부류를 놓친다(1.2.0 사고).
+          find .build -name 'SnipKey_SnipKey.bundle' -maxdepth 4 -exec rm -rf {} + || true
+          ./dist/SnipKey.app/Contents/MacOS/SnipKey --selfcheck
