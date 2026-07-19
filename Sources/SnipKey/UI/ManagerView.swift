@@ -537,6 +537,9 @@ struct SnippetEditor: View {
     // 미리보기 패널은 기본으로 접혀 있다. 눈 아이콘으로 켜면 확장 결과의 모양을
     // (실제 확장을 트리거하지 않고) 내용 편집기 바로 아래에서 보여 준다.
     @State private var showPreview = false
+    // 어떤 채우기 설정 폼(시트)을 띄울지. nil이면 닫힘. .sheet(item:)이 이 값의 변화로
+    // 시트를 연다 — 네 종류가 상호배타적이므로 불리언 네 개 대신 단일 열거형이 깔끔하다.
+    @State private var activeFillInSheet: FillInKind?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -574,10 +577,12 @@ struct SnippetEditor: View {
                 Spacer()
                 Menu(loc.s("editor.insertMacro")) {
                     // 라벨만 현지화한다 — 매크로 구문(%filltext…)은 기능이므로 절대 번역하지 않는다.
-                    macroButton(loc.s("macro.fillText"), "%filltext:name=field%")
-                    macroButton(loc.s("macro.fillArea"), "%fillarea:name=notes%")
-                    macroButton(loc.s("macro.fillPopup"), "%fillpopup:name=choice:option A:option B:default=option A%")
-                    macroButton(loc.s("macro.fillPart"), "%fillpart:name=section:default=yes%...%fillpartend%")
+                    // 채우기 네 종류는 날 구문을 붙이는 대신 설정 폼(시트)을 연다. 나머지
+                    // 매크로는 예전처럼 고정 문자열을 그대로 append 한다.
+                    Button(loc.s("macro.fillText")) { activeFillInSheet = .text }
+                    Button(loc.s("macro.fillArea")) { activeFillInSheet = .area }
+                    Button(loc.s("macro.fillPopup")) { activeFillInSheet = .popup }
+                    Button(loc.s("macro.fillPart")) { activeFillInSheet = .part }
                     Divider()
                     macroButton(loc.s("macro.clipboard"), "%clipboard")
                     macroButton(loc.s("macro.cursor"), "%|")
@@ -643,11 +648,206 @@ struct SnippetEditor: View {
         .onChange(of: snippet) { newValue in
             onChange(newValue)
         }
+        // 채우기 폼. Done을 누르면 폼이 FillInBuilder로 만든 매크로 문자열을 넘겨 주고,
+        // 여기서 snippet.content에 append 한다. 커서 위치가 아니라 끝에 붙이는 이유는
+        // SwiftUI TextEditor가 선택 범위/커서 위치를 신뢰성 있게 노출하지 않기 때문 —
+        // 흉내 내면 편집 중 커서가 튀는 회귀가 난다. 기존 매크로 메뉴도 끝에 붙인다.
+        .sheet(item: $activeFillInSheet) { kind in
+            switch kind {
+            case .text:
+                FillTextForm { snippet.content += $0 }
+            case .area:
+                FillAreaForm { snippet.content += $0 }
+            case .popup:
+                FillPopupForm { snippet.content += $0 }
+            case .part:
+                FillPartForm { snippet.content += $0 }
+            }
+        }
     }
 
     private func macroButton(_ title: String, _ text: String) -> some View {
         Button(title) {
             snippet.content += text
+        }
+    }
+}
+
+// MARK: - Fill-in configuration forms
+
+/// 어떤 채우기 폼을 띄울지 식별하는 값. Identifiable이라 .sheet(item:)에 바로 쓴다.
+enum FillInKind: String, Identifiable {
+    case text, area, popup, part
+    var id: String { rawValue }
+}
+
+/// 폼 공통 뼈대: 제목 + 내용 + (취소/삽입) 버튼 줄. 네 폼이 같은 모양을 공유하도록
+/// 묶어 중복을 없앤다. Esc=취소, Return=삽입으로 표준 macOS 시트 조작을 따른다.
+private struct FillInFormScaffold<Content: View>: View {
+    @EnvironmentObject var loc: LocalizationManager
+    let title: String
+    @ViewBuilder var content: () -> Content
+    let onCancel: () -> Void
+    let onInsert: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title).font(.headline)
+            content()
+            HStack {
+                Spacer()
+                Button(loc.s("fillinForm.cancel"), role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(loc.s("fillinForm.insert"), action: onInsert)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(minWidth: 380)
+    }
+}
+
+/// 단일 줄 채우기(filltext) 설정 폼.
+struct FillTextForm: View {
+    @EnvironmentObject var loc: LocalizationManager
+    @Environment(\.dismiss) private var dismiss
+    let onInsert: (String) -> Void
+
+    // 빈 폼은 위압적이므로 합리적인 자리표시자를 미리 넣되 사용자가 바꿀 수 있게 둔다.
+    @State private var name = "field"
+    @State private var defaultValue = ""
+
+    var body: some View {
+        FillInFormScaffold(title: loc.s("fillinForm.text.title")) {
+            Form {
+                TextField(loc.s("fillinForm.field.name"), text: $name)
+                TextField(loc.s("fillinForm.field.default"), text: $defaultValue)
+            }
+        } onCancel: {
+            dismiss()
+        } onInsert: {
+            onInsert(FillInBuilder.fillText(name: name, defaultValue: defaultValue))
+            dismiss()
+        }
+    }
+}
+
+/// 여러 줄 채우기(fillarea) 설정 폼. 매크로 구문에 없는 너비/높이는 뺀다.
+struct FillAreaForm: View {
+    @EnvironmentObject var loc: LocalizationManager
+    @Environment(\.dismiss) private var dismiss
+    let onInsert: (String) -> Void
+
+    @State private var name = "notes"
+    @State private var defaultValue = ""
+
+    var body: some View {
+        FillInFormScaffold(title: loc.s("fillinForm.area.title")) {
+            Form {
+                TextField(loc.s("fillinForm.field.name"), text: $name)
+                TextField(loc.s("fillinForm.field.default"), text: $defaultValue)
+            }
+        } onCancel: {
+            dismiss()
+        } onInsert: {
+            onInsert(FillInBuilder.fillArea(name: name, defaultValue: defaultValue))
+            dismiss()
+        }
+    }
+}
+
+/// 팝업 선택(fillpopup) 설정 폼. 옵션 행을 추가/삭제하고, 그중 하나를 기본값으로 고른다.
+struct FillPopupForm: View {
+    @EnvironmentObject var loc: LocalizationManager
+    @Environment(\.dismiss) private var dismiss
+    let onInsert: (String) -> Void
+
+    // 행마다 안정된 ID를 붙인다. 인덱스를 id로 쓰면 삭제 중 바인딩이 잠깐 범위를 벗어나
+    // 크래시가 날 수 있어, UUID로 감싼 행 모델을 쓴다.
+    private struct OptionRow: Identifiable {
+        let id = UUID()
+        var text: String
+    }
+
+    @State private var name = "choice"
+    // 팝업은 선택지가 최소 둘은 있어야 의미가 있으므로 빈 행 2개로 시작한다.
+    @State private var options: [OptionRow] = [OptionRow(text: ""), OptionRow(text: "")]
+    // "" = 기본값 없음(파서가 첫 옵션을 쓴다). 그 외에는 고른 옵션 문자열.
+    @State private var defaultValue = ""
+
+    private var nonEmptyOptions: [String] {
+        options.map(\.text).filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        FillInFormScaffold(title: loc.s("fillinForm.popup.title")) {
+            Form {
+                TextField(loc.s("fillinForm.field.name"), text: $name)
+
+                Section(loc.s("fillinForm.field.options")) {
+                    ForEach($options) { $row in
+                        HStack {
+                            TextField(loc.s("fillinForm.field.options"), text: $row.text)
+                            Button {
+                                options.removeAll { $0.id == row.id }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(options.count <= 1) // 최소 한 행은 남긴다.
+                        }
+                    }
+                    Button {
+                        options.append(OptionRow(text: ""))
+                    } label: {
+                        Label(loc.s("fillinForm.option.add"), systemImage: "plus")
+                    }
+                }
+
+                Picker(loc.s("fillinForm.field.default"), selection: $defaultValue) {
+                    Text(loc.s("fillinForm.default.none")).tag("")
+                    ForEach(nonEmptyOptions, id: \.self) { opt in
+                        Text(opt).tag(opt)
+                    }
+                }
+            }
+        } onCancel: {
+            dismiss()
+        } onInsert: {
+            // 사라진 옵션을 기본값으로 골라 둔 채 삭제했을 수 있으니, 실제 옵션에 없는
+            // 기본값은 빌더가 그대로 실어 보내되 UI 차원에서는 현재 옵션만 신뢰한다.
+            onInsert(FillInBuilder.fillPopup(name: name, options: nonEmptyOptions, defaultValue: defaultValue))
+            dismiss()
+        }
+    }
+}
+
+/// 선택 구간(fillpart) 설정 폼. 기본 포함 여부 토글과 여러 줄 내용.
+struct FillPartForm: View {
+    @EnvironmentObject var loc: LocalizationManager
+    @Environment(\.dismiss) private var dismiss
+    let onInsert: (String) -> Void
+
+    @State private var name = "section"
+    @State private var includeByDefault = true
+    @State private var content = ""
+
+    var body: some View {
+        FillInFormScaffold(title: loc.s("fillinForm.part.title")) {
+            Form {
+                TextField(loc.s("fillinForm.field.name"), text: $name)
+                Toggle(loc.s("fillinForm.field.includeByDefault"), isOn: $includeByDefault)
+                Section(loc.s("fillinForm.field.contents")) {
+                    TextEditor(text: $content)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 80)
+                }
+            }
+        } onCancel: {
+            dismiss()
+        } onInsert: {
+            onInsert(FillInBuilder.fillPart(name: name, includeByDefault: includeByDefault, content: content))
+            dismiss()
         }
     }
 }

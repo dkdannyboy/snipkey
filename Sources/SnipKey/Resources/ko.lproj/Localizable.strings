@@ -108,6 +108,21 @@
 "macro.time" = "시간 (14:30)";
 "macro.key" = "Enter 입력";
 
+/* MARK: 채우기 설정 폼 (매크로 삽입 메뉴에서 열림) */
+"fillinForm.text.title" = "채우기 필드 삽입";
+"fillinForm.area.title" = "여러 줄 채우기 삽입";
+"fillinForm.popup.title" = "팝업 선택 삽입";
+"fillinForm.part.title" = "선택 구간 삽입";
+"fillinForm.field.name" = "이름";
+"fillinForm.field.default" = "기본값";
+"fillinForm.field.options" = "옵션";
+"fillinForm.field.includeByDefault" = "기본으로 포함";
+"fillinForm.field.contents" = "내용";
+"fillinForm.default.none" = "없음";
+"fillinForm.option.add" = "옵션 추가";
+"fillinForm.cancel" = "취소";
+"fillinForm.insert" = "삽입";
+
 /* MARK: 설정 — 일반 */
 "settings.general.header" = "일반";
 "settings.general.enableExpansion" = "텍스트 확장 사용";

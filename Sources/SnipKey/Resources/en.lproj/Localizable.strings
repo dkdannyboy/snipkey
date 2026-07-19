@@ -109,6 +109,21 @@
 "macro.time" = "Time (14:30)";
 "macro.key" = "Press Enter";
 
+/* MARK: Fill-in configuration forms (presented from the Insert-macro menu) */
+"fillinForm.text.title" = "Insert Fill-in Field";
+"fillinForm.area.title" = "Insert Multi-line Fill-in";
+"fillinForm.popup.title" = "Insert Popup Choices";
+"fillinForm.part.title" = "Insert Optional Section";
+"fillinForm.field.name" = "Name";
+"fillinForm.field.default" = "Default value";
+"fillinForm.field.options" = "Options";
+"fillinForm.field.includeByDefault" = "Include by default";
+"fillinForm.field.contents" = "Contents";
+"fillinForm.default.none" = "None";
+"fillinForm.option.add" = "Add option";
+"fillinForm.cancel" = "Cancel";
+"fillinForm.insert" = "Insert";
+
 /* MARK: Settings — General */
 "settings.general.header" = "General";
 "settings.general.enableExpansion" = "Enable text expansion";

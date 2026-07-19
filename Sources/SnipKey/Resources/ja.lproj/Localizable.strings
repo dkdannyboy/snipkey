@@ -108,6 +108,21 @@
 "macro.time" = "時刻 (14:30)";
 "macro.key" = "Enterを押す";
 
+/* MARK: 入力設定フォーム（マクロ挿入メニューから開く） */
+"fillinForm.text.title" = "入力フィールドを挿入";
+"fillinForm.area.title" = "複数行入力を挿入";
+"fillinForm.popup.title" = "ポップアップ選択を挿入";
+"fillinForm.part.title" = "任意セクションを挿入";
+"fillinForm.field.name" = "名前";
+"fillinForm.field.default" = "デフォルト値";
+"fillinForm.field.options" = "選択肢";
+"fillinForm.field.includeByDefault" = "デフォルトで含める";
+"fillinForm.field.contents" = "内容";
+"fillinForm.default.none" = "なし";
+"fillinForm.option.add" = "選択肢を追加";
+"fillinForm.cancel" = "キャンセル";
+"fillinForm.insert" = "挿入";
+
 /* MARK: 設定 — 一般 */
 "settings.general.header" = "一般";
 "settings.general.enableExpansion" = "テキスト展開を有効にする";
