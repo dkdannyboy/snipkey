@@ -43,14 +43,16 @@ enum InlineSearchPanel {
         // Remember where the user was typing, so the snippet lands back there.
         let sourceApp = NSWorkspace.shared.frontmostApplication
 
+        // Spotlight식 팔레트라 창 자체엔 크롬이 없어야 한다. .titled를 쓰면 제목을
+        // 숨기고 타이틀바를 투명 처리해도 macOS가 빈 타이틀바 영역을 그려, 팔레트
+        // 위에 얇은 막대가 남는다. .borderless는 타이틀바를 아예 만들지 않는다.
+        // 포커스는 KeyablePanel이 canBecomeKey/Main을 강제하므로 입력에 지장 없다.
         let panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
-            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
         panel.level = .floating
         panel.isReleasedWhenClosed = false
