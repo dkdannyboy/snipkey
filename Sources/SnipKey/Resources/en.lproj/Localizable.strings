@@ -296,3 +296,6 @@
 "settings.sync.steps" = "To use the same snippets on another Mac:\n1. On this Mac, click “Save Snippets As…” and choose a folder in iCloud Drive (or another synced folder).\n2. On your other Mac, click “Link to Snippets…” and choose that same file.\nEdit on either Mac — the change flows through the cloud to the other.";
 "settings.sync.caveat" = "Give the cloud a moment to sync between Macs, and try not to edit on both at once. If two Macs change the library at the same time, SnipKey keeps both versions safe instead of losing your snippets.";
 "settings.data.help" = "Import merges snippets into your library — it never replaces what you already have. Export saves a copy you can keep as a backup.";
+
+/* MARK: 이주 안내 */
+"warn.textExpanderRunning" = "TextExpander is still running. Quit it, or each expansion will fire twice — once from each app.";

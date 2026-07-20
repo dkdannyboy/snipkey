@@ -265,6 +265,17 @@ struct OnboardingView: View {
                     .foregroundStyle(.orange)
             }
 
+            // TextExpander가 켜져 있으면 같은 약어를 둘이 각자 확장해 두 번 나온다.
+            // 이주 중 흔한 함정이라(실제 사용자 사례) 여기서 미리 안내한다.
+            if TextExpanderDetection.isRunning() {
+                Label(loc.s("warn.textExpanderRunning"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 420)
+            }
+
             TextField(placeholderAbbrev, text: $tryItText)
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)

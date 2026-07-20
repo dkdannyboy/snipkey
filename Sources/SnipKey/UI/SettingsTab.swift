@@ -321,6 +321,11 @@ struct SettingsTab: View {
                 if result.richTextCount > 0 {
                     msg += loc.s("settings.import.richTextNote", result.richTextCount)
                 }
+                // TextExpander에서 막 가져왔는데 그게 아직 켜져 있으면 같은 약어를 둘이
+                // 각자 확장해 두 번 나온다. 가져오기 직후가 이 안내를 하기 딱 좋은 시점이다.
+                if TextExpanderDetection.isRunning() {
+                    msg += "\n" + loc.s("warn.textExpanderRunning")
+                }
                 importMessage = msg
             case .blockedByLoadFailure:
                 importMessage = loc.s("settings.import.blockedLoadFailure")
