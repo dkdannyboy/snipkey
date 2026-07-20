@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in SnipKey is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. A few details make it much
+        faster to fix — especially the SnipKey and macOS versions, and the log.
+  - type: input
+    id: snipkey-version
+    attributes:
+      label: SnipKey version
+      description: "Menu bar ⚡ → Open SnipKey → Settings, or the app's About. e.g. 1.2.3"
+      placeholder: "1.2.3"
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "14.5 (Sonoma)"
+    validations:
+      required: true
+  - type: input
+    id: app-context
+    attributes:
+      label: Which app were you typing in?
+      description: Expansion behaves differently across apps (terminals, browsers, editors).
+      placeholder: "TextEdit / Safari / Terminal / …"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Type ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: What you expected vs. what happened
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt (optional but very helpful)
+      description: "Settings → Data → Open Log (or ~/Library/Logs/SnipKey.log). Paste the lines around when the bug happened."
+      render: text
+  - type: checkboxes
+    id: single-instance
+    attributes:
+      label: Sanity check
+      options:
+        - label: "Only one text expander is running (no TextExpander/other expander open at the same time)."

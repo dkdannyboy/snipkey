@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest an idea for SnipKey
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to do that SnipKey makes hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like SnipKey to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds you've tried
