@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SnipKey — free, open-source text expander for macOS</title>
+<meta name="description" content="A free, open-source, native-GUI text expander for macOS. Type a short abbreviation, get the full text. Imports your TextExpander library, works fully offline.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<meta property="og:type" content="website">
+<meta property="og:title" content="SnipKey — free, open-source text expander for macOS">
+<meta property="og:description" content="Type a short abbreviation, get the full text. Imports your TextExpander library, works fully offline. Free & MIT.">
+<meta property="og:url" content="https://dkdannyboy.github.io/snipkey/">
+<meta property="og:image" content="https://dkdannyboy.github.io/snipkey/images/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --bg:#0b0e14; --bg2:#0d1119; --surface:#141925; --surface2:#1a2030;
+    --text:#e7ecf3; --muted:#9aa4b2; --dim:#6b7484;
+    --accent:#ffd60a; --accent-ink:#1a1400; --border:rgba(255,255,255,.09);
+    --radius:16px; --maxw:1040px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+  .accent{color:var(--accent)}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  /* nav */
+  nav{display:flex; align-items:center; justify-content:space-between; padding:22px 0}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800; font-size:22px; letter-spacing:-.02em}
+  .navlinks{display:flex; gap:22px; align-items:center; font-size:15px; color:var(--muted)}
+  .navlinks a:hover{color:var(--text)}
+  .navlinks .lang{color:var(--dim); font-size:14px}
+
+  /* hero */
+  header{position:relative; overflow:hidden; border-bottom:1px solid var(--border);
+    background:radial-gradient(900px 400px at 78% -8%, rgba(255,214,10,.10), transparent 60%), linear-gradient(180deg,var(--bg2),var(--bg));}
+  .hero{padding:64px 0 72px; display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center}
+  .hero h1{font-size:52px; line-height:1.08; letter-spacing:-.03em; margin:0 0 18px; font-weight:800}
+  .hero p.sub{font-size:19px; color:var(--muted); margin:0 0 28px; max-width:36ch}
+  .cta{display:flex; flex-wrap:wrap; gap:12px; align-items:center}
+  .btn{display:inline-flex; align-items:center; gap:8px; padding:12px 20px; border-radius:12px;
+    font-weight:700; font-size:15px; text-decoration:none; border:1px solid var(--border); transition:.15s}
+  .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn.ghost{background:var(--surface); color:var(--text)}
+  .btn.ghost:hover{border-color:rgba(255,255,255,.24)}
+  .subnote{color:var(--dim); font-size:13.5px; margin-top:14px}
+
+  /* demo card */
+  .demo{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:22px; box-shadow:0 24px 60px rgba(0,0,0,.35)}
+  .demo .row{display:flex; align-items:center; gap:14px; padding:12px 6px; border-bottom:1px solid var(--border)}
+  .demo .row:last-child{border-bottom:0}
+  .abbr{flex:0 0 auto; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    padding:5px 10px; font:600 15px ui-monospace,Menlo,monospace; color:var(--accent)}
+  .arrow{color:var(--dim); flex:0 0 auto}
+  .out{color:var(--text); font-size:14.5px; opacity:.95}
+  .out small{color:var(--dim)}
+
+  /* sections */
+  section{padding:68px 0}
+  section.alt{background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border)}
+  h2{font-size:32px; letter-spacing:-.02em; margin:0 0 8px; font-weight:800}
+  .lead{color:var(--muted); margin:0 0 34px; font-size:17px}
+
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px}
+  .card h3{margin:0 0 6px; font-size:17px}
+  .card p{margin:0; color:var(--muted); font-size:14.5px}
+  .ic{font-size:22px; margin-bottom:12px; display:block}
+
+  /* comparison */
+  .tablewrap{overflow-x:auto; border:1px solid var(--border); border-radius:14px}
+  table{border-collapse:collapse; width:100%; min-width:520px; font-size:15px}
+  th,td{padding:14px 18px; text-align:left; border-bottom:1px solid var(--border)}
+  thead th{color:var(--muted); font-weight:600; font-size:13.5px; text-transform:uppercase; letter-spacing:.04em}
+  tbody tr:last-child td{border-bottom:0}
+  td.snip{font-weight:700}
+  .yes{color:var(--accent); font-weight:700}
+  .no{color:var(--dim)}
+
+  /* screenshot */
+  .shot{border-radius:14px; border:1px solid var(--border); width:100%; display:block; box-shadow:0 20px 50px rgba(0,0,0,.35)}
+
+  /* install */
+  .install-cols{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  .term{background:#0a0d13; border:1px solid var(--border); border-radius:12px; padding:16px 18px;
+    font:14px ui-monospace,Menlo,monospace; color:#d6deea; position:relative; overflow-x:auto}
+  .term .c{color:var(--accent)}
+  .copy{position:absolute; top:10px; right:10px; background:var(--surface2); color:var(--muted);
+    border:1px solid var(--border); border-radius:7px; padding:4px 9px; font:600 12px system-ui; cursor:pointer}
+  .copy:hover{color:var(--text)}
+
+  footer{padding:44px 0; border-top:1px solid var(--border); color:var(--dim); font-size:14px}
+  footer a{color:var(--muted)} footer a:hover{color:var(--text)}
+  footer .tm{margin-top:14px; font-size:12.5px; color:var(--dim); max-width:70ch}
+
+  @media(max-width:820px){
+    .hero{grid-template-columns:1fr; gap:32px; padding:44px 0 52px}
+    .hero h1{font-size:40px}
+    .grid{grid-template-columns:1fr}
+    .install-cols{grid-template-columns:1fr}
+    .navlinks{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="brand"><span>⚡</span> SnipKey</div>
+    <div class="navlinks">
+      <a href="#features">Features</a>
+      <a href="#why">Why SnipKey</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/dkdannyboy/snipkey">GitHub</a>
+      <span class="lang"><a href="https://github.com/dkdannyboy/snipkey/blob/main/README.ko.md">한국어</a> · <a href="https://github.com/dkdannyboy/snipkey/blob/main/README.ja.md">日本語</a></span>
+    </div>
+  </nav>
+</div>
+
+<header>
+  <div class="wrap hero">
+    <div>
+      <h1>Type less.<br>Say <span class="accent">more</span>.</h1>
+      <p class="sub">A free, open-source, native text expander for macOS. Type a short abbreviation — get the whole thing.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/dkdannyboy/snipkey/releases/latest">Download for macOS</a>
+        <a class="btn ghost" href="https://github.com/dkdannyboy/snipkey">View on GitHub ★</a>
+      </div>
+      <div class="subnote">macOS 13+ · Signed &amp; notarized by Apple · MIT licensed · no account, no network</div>
+    </div>
+    <div class="demo" aria-label="Expansion examples">
+      <div class="row"><span class="abbr">;addr</span><span class="arrow">→</span><span class="out">1600 Amphitheatre Pkwy, Mountain View, CA 94043</span></div>
+      <div class="row"><span class="abbr">;acct</span><span class="arrow">→</span><span class="out">Chase ••••6789 &nbsp;<small>routing 021000021</small></span></div>
+      <div class="row"><span class="abbr">;cell</span><span class="arrow">→</span><span class="out">+1 (415) 555-0123</span></div>
+      <div class="row"><span class="abbr">;sig</span><span class="arrow">→</span><span class="out">Best regards,<br><small>Daniel · SnipKey</small></span></div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Everything you'd expect — nothing you don't</h2>
+    <p class="lead">The muscle memory of TextExpander, as a native Mac app that stays on your machine.</p>
+    <div class="grid">
+      <div class="card"><span class="ic">⌨️</span><h3>Expansion everywhere</h3><p>Works in every app. Punctuation-prefixed abbreviations fire instantly; bare words wait for a terminator so normal typing is never eaten.</p></div>
+      <div class="card"><span class="ic">🔍</span><h3>Search anywhere (⌘/)</h3><p>Forgot an abbreviation? Search your whole library by abbreviation, label, or content from inside any app, then press Return.</p></div>
+      <div class="card"><span class="ic">📥</span><h3>One-click TextExpander import</h3><p>Reads your TextExpander library directly — groups, fill-ins, nested snippets, clipboard macros. Nothing to retype.</p></div>
+      <div class="card"><span class="ic">📝</span><h3>Fill-in forms</h3><p>A snippet can pause and ask for a name, an amount, or a choice from a list, then assemble the final text.</p></div>
+      <div class="card"><span class="ic">☁️</span><h3>Multi-Mac sync</h3><p>Point it at a file in iCloud Drive or Dropbox. Guardrails back up before overwriting and refuse to lose a snippet.</p></div>
+      <div class="card"><span class="ic">🔒</span><h3>Private by design</h3><p>No account, no telemetry, no network code at all. Nothing you type ever leaves your Mac. UI in English, 한국어, 日本語.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="why">
+  <div class="wrap">
+    <h2>Why SnipKey?</h2>
+    <p class="lead">There are other text expanders. SnipKey is for a native Mac app with a real GUI, your TextExpander library imported as-is, and nothing in the cloud.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>&nbsp;</th><th>SnipKey</th><th>TextExpander</th><th>Espanso</th></tr></thead>
+        <tbody>
+          <tr><td class="snip">Price</td><td class="yes">Free</td><td>Subscription</td><td>Free</td></tr>
+          <tr><td class="snip">Open source</td><td class="yes">✓ MIT</td><td class="no">✕</td><td class="yes">✓</td></tr>
+          <tr><td class="snip">Native GUI editor</td><td class="yes">✓</td><td>✓</td><td class="no">Config files (YAML)</td></tr>
+          <tr><td class="snip">One-click TextExpander import</td><td class="yes">✓</td><td>—</td><td class="no">✕</td></tr>
+          <tr><td class="snip">No account, fully offline</td><td class="yes">✓</td><td class="no">✕</td><td class="yes">✓</td></tr>
+          <tr><td class="snip">Built-in UI: EN / 한국어 / 日本語</td><td class="yes">✓</td><td class="no">✕</td><td class="no">✕</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lead" style="margin-top:20px">Espanso is excellent — especially if you also want Linux and Windows. SnipKey is deliberately Mac-only and GUI-first, and it reads your existing TextExpander library so you keep every snippet.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>A real app, not a config file</h2>
+    <p class="lead">Manage your whole library in a native window. Search, edit, organize into groups.</p>
+    <img class="shot" src="images/snippets.png" alt="SnipKey snippet library and quick search">
+  </div>
+</section>
+
+<section class="alt" id="install">
+  <div class="wrap">
+    <h2>Install in seconds</h2>
+    <p class="lead">macOS 13 or later. The disk image is signed and notarized, so it opens with no Gatekeeper warning.</p>
+    <div class="install-cols">
+      <div>
+        <h3 style="margin:0 0 10px">Homebrew</h3>
+        <div class="term"><button class="copy" onclick="copyBrew(this)">Copy</button><span id="brew"><span class="c">brew</span> tap dkdannyboy/tap
+<span class="c">brew</span> install --cask snipkey</span></div>
+        <p class="subnote">Upgrade later with <code>brew upgrade --cask snipkey</code>.</p>
+      </div>
+      <div>
+        <h3 style="margin:0 0 10px">Direct download</h3>
+        <div class="term">Grab <span class="c">SnipKey.dmg</span> from the latest
+release, open it, and drag
+SnipKey to Applications.</div>
+        <p class="subnote"><a class="accent" href="https://github.com/dkdannyboy/snipkey/releases/latest">Download the latest release →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="brand" style="font-size:18px; margin-bottom:10px"><span>⚡</span> SnipKey</div>
+    <a href="https://github.com/dkdannyboy/snipkey">GitHub</a> ·
+    <a href="https://github.com/dkdannyboy/snipkey/releases">Releases</a> ·
+    <a href="https://github.com/dkdannyboy/snipkey/blob/main/README.md">Docs</a> ·
+    <a href="https://github.com/dkdannyboy/snipkey/blob/main/LICENSE">MIT License</a> ·
+    <a href="https://github.com/dkdannyboy/snipkey/blob/main/README.ko.md">한국어</a> ·
+    <a href="https://github.com/dkdannyboy/snipkey/blob/main/README.ja.md">日本語</a>
+    <p class="tm">TextExpander and Espanso are trademarks of their respective owners. SnipKey is an independent open-source project and is not affiliated with, sponsored by, or endorsed by them.</p>
+  </div>
+</footer>
+
+<script>
+  function copyBrew(btn){
+    var text = "brew tap dkdannyboy/tap\nbrew install --cask snipkey";
+    navigator.clipboard.writeText(text).then(function(){
+      var old = btn.textContent; btn.textContent = "Copied!";
+      setTimeout(function(){ btn.textContent = old; }, 1500);
+    });
+  }
+</script>
+</body>
+</html>
