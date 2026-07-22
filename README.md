@@ -2,7 +2,7 @@
 
 # ⚡ SnipKey
 
-**A free, open-source text expander for macOS — a drop-in replacement for TextExpander.**
+**A free, open-source, native-GUI text expander for macOS — a drop-in replacement for TextExpander.**
 
 Native Swift · Apple Silicon · no subscription · no account · no network access
 
@@ -38,6 +38,26 @@ your Mac.
   or any sync folder — with guardrails that refuse to lose your snippets.
 - **Three languages.** English, 한국어, and 日本語, switchable instantly in Settings.
 - **Private by design.** No account, no telemetry, no network code at all.
+
+## Why SnipKey?
+
+There are other text expanders — TextExpander itself, and open-source tools like
+[Espanso](https://espanso.org). SnipKey is for people who want a **native Mac app
+with a real GUI**, their **TextExpander library imported as-is**, and **nothing in
+the cloud**.
+
+| | **SnipKey** | TextExpander | Espanso |
+|---|---|---|---|
+| Price | **Free** | Subscription | Free |
+| Open source | ✅ MIT | ❌ | ✅ |
+| Native GUI snippet editor | ✅ | ✅ | Config files (YAML) |
+| One-click TextExpander import | ✅ | — | ❌ |
+| No account, fully offline | ✅ | ❌ | ✅ |
+| Built-in UI in English / 한국어 / 日本語 | ✅ | ❌ | ❌ |
+
+Espanso is excellent — especially if you also want Linux and Windows. SnipKey is
+deliberately Mac-only and GUI-first, and it reads your existing TextExpander
+library so you keep every snippet.
 
 ## Install
 
@@ -157,3 +177,10 @@ swift test                       # run the unit tests
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Trademarks
+
+TextExpander and Espanso are trademarks of their respective owners. SnipKey is an
+independent open-source project and is not affiliated with, sponsored by, or
+endorsed by them. "Drop-in replacement" refers to data and behaviour
+compatibility, not affiliation.

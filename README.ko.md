@@ -2,7 +2,7 @@
 
 # ⚡ SnipKey
 
-**macOS용 무료 오픈소스 텍스트 확장기 — TextExpander를 그대로 대체합니다.**
+**macOS용 무료 오픈소스 네이티브 GUI 텍스트 확장기 — TextExpander를 그대로 대체합니다.**
 
 네이티브 Swift · Apple Silicon · 구독 없음 · 계정 없음 · 네트워크 접속 없음
 
@@ -37,6 +37,25 @@
   라이브러리를 씁니다 — 스니펫을 잃지 않도록 지키는 안전장치와 함께.
 - **3개 언어.** English·한국어·日本語, 설정에서 즉시 전환.
 - **설계부터 프라이빗.** 계정도, 텔레메트리도, 네트워크 코드도 아예 없습니다.
+
+## 왜 SnipKey인가?
+
+텍스트 확장기는 이미 여럿 있습니다 — TextExpander 자체, 그리고
+[Espanso](https://espanso.org) 같은 오픈소스 도구들. SnipKey는 **제대로 된 GUI를
+갖춘 네이티브 Mac 앱**, **TextExpander 라이브러리를 그대로 가져오기**, **클라우드에
+아무것도 두지 않기**를 원하는 사람을 위한 것입니다.
+
+| | **SnipKey** | TextExpander | Espanso |
+|---|---|---|---|
+| 가격 | **무료** | 구독제 | 무료 |
+| 오픈소스 | ✅ MIT | ❌ | ✅ |
+| 네이티브 GUI 편집기 | ✅ | ✅ | 설정 파일(YAML) |
+| TextExpander 원클릭 가져오기 | ✅ | — | ❌ |
+| 계정 없이 완전 오프라인 | ✅ | ❌ | ✅ |
+| 한국어 / English / 日本語 내장 UI | ✅ | ❌ | ❌ |
+
+Espanso도 훌륭합니다 — 특히 Linux·Windows까지 필요하다면요. SnipKey는 일부러 Mac
+전용, GUI 우선이며, 기존 TextExpander 라이브러리를 읽어와 스니펫을 하나도 잃지 않습니다.
 
 ## 설치
 
@@ -154,3 +173,9 @@ swift test                       # 유닛 테스트
 ## 라이선스
 
 MIT. [LICENSE](LICENSE)를 보세요.
+
+## 상표
+
+TextExpander와 Espanso는 각 소유자의 상표입니다. SnipKey는 독립적인 오픈소스
+프로젝트로, 이들과 제휴·후원·보증 관계가 없습니다. "그대로 대체"는 데이터·동작
+호환성을 뜻하며 제휴를 뜻하지 않습니다.

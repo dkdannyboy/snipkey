@@ -226,6 +226,9 @@ import-data/
 # TextExpander UI 참고용 스크린샷. 남의 앱 화면이라 배포물에 넣지 않는다.
 reference/
 
+# 출시 마케팅 작업 문서 (공개 리포에 넣지 않는다)
+LAUNCH.md
+
 # Local AI tooling config (not part of the open-source project)
 .claude/
 .moai/
