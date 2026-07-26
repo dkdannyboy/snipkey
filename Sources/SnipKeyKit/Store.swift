@@ -169,9 +169,11 @@ public final class Store: ObservableObject {
     private var localDefaultURL: URL { localSupportDirectory.appendingPathComponent("store.json") }
     private var backupDirectory: URL { localSupportDirectory }
 
-    /// 감시자를 경로별로 새로 만드는 팩토리. 인스턴스가 아니라 팩토리인 것은 재배치
-    /// 때문이다 — 위치가 바뀌면 새 디렉터리를 감시하는 새 감시자가 필요하다.
-    /// 테스트는 nil을 돌려주는 기본 팩토리로 감시자를 끄고, 필요한 테스트만 주입한다.
+    /// 감시자를 경로별로 새로 만드는 팩토리. 인자는 감시할 저장소 **파일**의 전체 경로다
+    /// (디렉터리가 아니다) — 감시자 종류를 파일의 iCloud 여부로 고르고, MetadataQuery가
+    /// 파일명 술어를 걸어야 하기 때문이다. 인스턴스가 아니라 팩토리인 것은 재배치 때문이다
+    /// — 위치가 바뀌면 새 경로를 감시하는 새 감시자가 필요하다. 테스트는 nil을 돌려주는
+    /// 기본 팩토리로 감시자를 끄고, 필요한 테스트만 주입한다(인자는 무시해도 된다).
     private let watcherFactory: (URL) -> StoreWatching?
     private var watcher: StoreWatching?
 
@@ -386,11 +388,45 @@ public final class Store: ObservableObject {
     }
 
     public convenience init() {
-        // 앱 경로. 해석된 위치의 디렉터리를 감시하는 실제 감시자를 붙인다.
+        // 앱 경로. 해석된 위치에 맞는 감시자를 붙인다 — iCloud면 로컬+원격 합성,
+        // 순수 로컬이면 디렉터리 감시자 하나(추가 비용 0).
         self.init(
             location: Store.resolveLocation(),
-            watcherFactory: { DirectoryWatcher(directoryURL: $0) }
+            watcherFactory: Store.defaultWatcherFactory
         )
+    }
+
+    /// 앱 경로의 기본 감시자 선택. 인자는 감시할 저장소 **파일**의 전체 경로다(디렉터리가
+    /// 아니다) — `MetadataQueryWatcher`가 파일명으로 술어를 걸어야 하기 때문이다.
+    ///
+    /// iCloud(유비쿼티) 위치면 로컬 쓰기를 잡는 `DirectoryWatcher`와 원격 iCloud 반영을
+    /// 잡는 `MetadataQueryWatcher`를 `CompositeWatcher`로 함께 세운다. 순수 로컬 경로면
+    /// 지금까지처럼 `DirectoryWatcher` 하나만 둔다 — NSMetadataQuery를 로컬에 걸어봐야
+    /// 절대 울리지 않으므로 순수 비용만 늘 뿐이다. `relocate`도 이 팩토리를 다시 부르므로
+    /// 위치가 바뀌면 감시자 구성도 따라 바뀐다.
+    // @MX:NOTE: [AUTO] 감시자 선택 지점. iCloud 경로 판정으로 Composite(Directory+MetadataQuery) vs Directory 단독을 가른다. relocate가 재무장 때 재호출한다.
+    static func defaultWatcherFactory(_ fileURL: URL) -> StoreWatching? {
+        let directoryWatcher = DirectoryWatcher(directoryURL: fileURL.deletingLastPathComponent())
+        guard isUbiquitousLocation(fileURL) else { return directoryWatcher }
+        return CompositeWatcher([directoryWatcher, MetadataQueryWatcher(fileURL: fileURL)])
+    }
+
+    /// 파일 경로가 iCloud(유비쿼티) 위치인지 판정한다. 실체화된 파일이면 리소스 값으로
+    /// 확실히 알 수 있고(`isUbiquitousItem`), 자리표시자로 축출됐거나 아직 없어서 리소스
+    /// 값을 못 얻으면 상위 폴더로 한 번 더 시도한 뒤, 마지막으로 iCloud Drive 경로 모양
+    /// (`com~apple~CloudDocs` / `Mobile Documents`)으로 보수적으로 추정한다.
+    static func isUbiquitousLocation(_ fileURL: URL) -> Bool {
+        if let values = try? fileURL.resourceValues(forKeys: [.isUbiquitousItemKey]),
+           values.isUbiquitousItem == true {
+            return true
+        }
+        let directory = fileURL.deletingLastPathComponent()
+        if let values = try? directory.resourceValues(forKeys: [.isUbiquitousItemKey]),
+           values.isUbiquitousItem == true {
+            return true
+        }
+        let path = fileURL.path
+        return path.contains("com~apple~CloudDocs") || path.contains("/Mobile Documents/")
     }
 
     /// 경로를 직접 주는 경로 — 테스트와 하네스용. 포인터의 의미는 붙지 않으므로
@@ -454,7 +490,9 @@ public final class Store: ObservableObject {
         self.starLastPromptedCount = deviceDefaults.integer(forKey: DeviceStateKey.starLastPromptedCount)
         rebuildIndex()
 
-        self.watcher = watcherFactory(fileURL.deletingLastPathComponent())
+        // 팩토리에는 파일 전체 경로를 넘긴다(디렉터리가 아니라) — 감시자 선택이
+        // 파일의 iCloud 여부와 파일명에 달려 있기 때문이다.
+        self.watcher = watcherFactory(fileURL)
         startWatching()
     }
 
@@ -703,6 +741,15 @@ public final class Store: ObservableObject {
         let onDisk = Self.currentDigest(at: fileURL)
         // 우리가 아는 그 파일 그대로. 우리 자신의 쓰기이거나 무관한 디렉터리 이벤트다.
         guard onDisk != lastKnownDigest else { return }
+        // 유비쿼티 파일이 아직 실체화되지 않은 자리표시자라 읽히지 않는다(.unreadable).
+        // 지금 리로드해도 읽을 게 없다 — iCloud에 다운로드를 걸어두면, 실체화 완료 뒤에
+        // 오는 MetadataQuery(또는 DirectoryWatcher) 이벤트가 실제 리로드를 몰고 온다.
+        // 바쁜 대기(busy-wait) 없이 이벤트 구동으로 이어받는다. 로컬(비유비쿼티) 파일은
+        // requestDownloadIfPlaceholder가 false를 돌려주므로 아래 기존 경로로 그대로 간다.
+        // @MX:NOTE: [AUTO] iCloud 자리표시자면 다운로드만 걸고 리턴. 실체화 후 감시자 이벤트가 리로드를 구동한다. 로컬은 영향 없음(false 반환).
+        if onDisk == .unreadable, Self.requestDownloadIfPlaceholder(at: fileURL) {
+            return
+        }
         if hasUnsavedChanges() {
             // 미저장 로컬 편집이 있다. 리로드하면 그 편집이 사라진다 — 원래 버그의
             // 거울상. 리로드하지 않고, 저장을 막아 쓰기 선결 조건과 같은 결말로
@@ -1036,7 +1083,8 @@ public final class Store: ObservableObject {
         let loaded = Self.loadFrom(location)
         applyLoaded(loaded) // matcher 재구축 포함, 저장 유발 억제
 
-        watcher = watcherFactory(fileURL.deletingLastPathComponent())
+        // 재무장. 새 위치가 iCloud면 감시자 구성도 iCloud용으로 바뀐다(파일 경로 전달).
+        watcher = watcherFactory(fileURL)
         startWatching()
 
         // 방금 적용한 로드가 깨끗한지 알린다. 호출자는 이 값에 커밋을 건다.
