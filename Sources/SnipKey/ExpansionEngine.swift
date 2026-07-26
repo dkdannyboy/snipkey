@@ -13,6 +13,11 @@ final class ExpansionEngine {
     private var buffer = ""
     private let maxBuffer = 64
 
+    /// 표시 버퍼(buffer)와 나란히 가는 물리 키 버퍼. 한글 IME처럼 화면 글자와
+    /// 물리 QWERTY 키가 어긋날 때, 물리 키가 이루는 영문 약어로도 확장을 발화시킨다.
+    /// buffer는 기존 동작 보존을 위해 그대로 두고, 이 병렬 버퍼만 추가한다.
+    private var layout = LayoutBuffer(maxCount: 64)
+
     /// 마지막 '진짜' 사용자 입력(키 또는 마우스 클릭)의 이벤트 시각. 첫 백스페이스를
     /// 내보내기 직전에 이걸 보고, 가드를 무장한 뒤로 입력이 들어왔다면 확장을 통째로 버린다.
     ///
@@ -137,6 +142,7 @@ final class ExpansionEngine {
             // 아예 쏘지 않으므로 여기 오는 클릭은 전부 진짜 사용자 입력이다.
             inputClock.mark(at: InputClock.seconds(sinceBootNanos: event.timestamp))
             buffer = ""
+            layout.clear()
             return
         }
 
@@ -161,12 +167,14 @@ final class ExpansionEngine {
 
         guard !isSuspended, store.settings.expansionEnabled else {
             buffer = ""
+            layout.clear()
             return
         }
 
         let flags = event.flags
         if flags.contains(.maskCommand) || flags.contains(.maskControl) {
             buffer = ""
+            layout.clear()
             return
         }
 
@@ -174,10 +182,12 @@ final class ExpansionEngine {
         switch KeyClassifier.action(forKeyCode: keyCode) {
         case .deleteLast:
             if !buffer.isEmpty { buffer.removeLast() }
+            layout.deleteLast()
             return
 
         case .clearBuffer:
             buffer = ""
+            layout.clear()
             return
 
         case .literal:
@@ -191,27 +201,44 @@ final class ExpansionEngine {
         let typed = String(utf16CodeUnits: chars, count: length)
         guard !typed.isEmpty, typed.unicodeScalars.allSatisfy({ !$0.properties.isDefaultIgnorableCodePoint }) else { return }
 
+        // 같은 키를 US/ANSI 배열로도 해석해 물리 버퍼를 채운다. 대응 문자가 없으면
+        // nil — 이때는 물리 재구성을 신뢰할 수 없으므로 appendAndMatch가 물리 버퍼를 비운다.
+        let physical = USKeyboardLayout.character(forKeyCode: keyCode, shift: flags.contains(.maskShift))
+
         // 스페이스나 구두점도 여기로 들어온다. 종결자 판정은 매처가 한다 —
         // 이 층은 '타이핑된 글자'와 '버퍼를 무효화하는 키'만 구분하면 된다.
-        appendAndMatch(typed)
+        appendAndMatch(typed, physical: physical)
     }
 
-    /// 버퍼에 글자를 붙이고 매칭을 시도한다. 매치되면 버퍼를 비우고 확장을 건다.
-    private func appendAndMatch(_ typed: String) {
+    /// 표시·물리 두 버퍼에 글자를 붙이고 매칭을 시도한다. 매치되면 두 버퍼를 모두
+    /// 비우고 확장을 건다. 표시 버퍼가 우선하므로 영문/ABC 모드에서는 정확히 한 번만
+    /// 발화한다(이중 확장 없음).
+    private func appendAndMatch(_ typed: String, physical: Character?) {
         buffer += typed
         if buffer.count > maxBuffer {
             buffer = String(buffer.suffix(maxBuffer))
         }
 
-        if let match = store.matcher.match(buffer: buffer) {
-            Log.write("matched '\(match.snippet.abbreviation)'")
-            buffer = ""
-            // 지금 무장한다. 방금 친 종결자의 이벤트 시각은 이 시점보다 이르므로 판정에
-            // 걸리지 않고, 이 뒤로 도착하는 입력(키·클릭)은 전부 확장을 취소시킨다.
-            let quiescence = inputClock.arm()
-            DispatchQueue.main.async { [weak self] in
-                self?.expand(match, quiescence: quiescence)
-            }
+        // 물리 키 버퍼도 나란히 채운다. US/ANSI 대응이 없는 키(비-ANSI)는 물리 재구성을
+        // 신뢰할 수 없으므로 물리 버퍼를 비운다 — 표시 버퍼 매칭에는 영향이 없다.
+        if let physical {
+            layout.appendLiteral(composed: typed, physical: physical)
+        } else {
+            layout.clear()
+        }
+
+        guard let decision = LayoutAwareMatcher.decide(
+            composedBuffer: buffer, layout: layout, matcher: store.matcher
+        ) else { return }
+
+        Log.write("matched '\(decision.match.snippet.abbreviation)' via \(decision.source)")
+        buffer = ""
+        layout.clear()
+        // 지금 무장한다. 방금 친 종결자의 이벤트 시각은 이 시점보다 이르므로 판정에
+        // 걸리지 않고, 이 뒤로 도착하는 입력(키·클릭)은 전부 확장을 취소시킨다.
+        let quiescence = inputClock.arm()
+        DispatchQueue.main.async { [weak self] in
+            self?.expand(decision, quiescence: quiescence)
         }
     }
 
@@ -233,15 +260,17 @@ final class ExpansionEngine {
         }
     }
 
-    /// 매처가 정한 대로 지우고 확장한다. 몇 글자를 지울지는 약어 길이가 아니라
-    /// 매치가 알려준다 — 맨몸 약어는 종결자까지 함께 지웠다가 뒤에 다시 찍는다.
-    private func expand(_ match: Store.Matcher.Match, quiescence: InputQuiescenceGuard) {
+    /// 결정이 정한 대로 지우고 확장한다. 몇 글자를 지울지는 약어 길이가 아니라
+    /// 결정이 알려준다 — 표시 버퍼 매치는 매처가 준 값을 그대로 쓰고, 물리 버퍼
+    /// 매치는 화면에 보이는 조합 글자 수를 쓴다(한글 IME에서 물리 키 수와 다르다).
+    /// 맨몸 약어는 종결자까지 함께 지웠다가 확장 뒤에 다시 찍는다.
+    private func expand(_ decision: BufferMatchDecision, quiescence: InputQuiescenceGuard) {
         // The app the abbreviation was typed into. Everything we inject has to
         // land there, not wherever focus drifts to while we work.
         expand(
-            match.snippet,
-            backspaces: match.backspaces,
-            terminator: match.terminator,
+            decision.match.snippet,
+            backspaces: decision.backspaces,
+            terminator: decision.terminator,
             targetApp: NSWorkspace.shared.frontmostApplication,
             quiescence: quiescence
         )

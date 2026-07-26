@@ -52,6 +52,16 @@ TEXTEDIT_SAFE=0
 E2E_DOC_NAME="snipkey-e2e-scratch.txt"
 E2E_DOC_PATH="$TMP_DIR/$E2E_DOC_NAME"
 
+# ── IME(입력 소스) 상태 ─────────────────────────────────────────────────────
+# 레이아웃 기반(물리 키) 확장 케이스는 키보드를 '한글 두벌식'으로 강제로 바꾼 뒤
+# 물리 QWERTY 키를 친다. 그런데 IME 전환은 클립보드·SnipKey처럼 전역 상태다 —
+# 하네스가 중간에 죽으면 사용자가 한글 입력에 갇힌 채 방치된다. 그래서 세 가지를
+# 붙잡아 둔다: 헬퍼 바이너리 경로, 전환 직전의 원래 입력 소스 ID, 그리고 우리가
+# 실제로 전환했는지 여부. cleanup()이 IME_SWITCHED=1일 때만 원래 소스로 되돌린다.
+IME_HELPER_BIN=""
+IME_ORIGINAL_SOURCE=""
+IME_SWITCHED=0
+
 typeset -a FAILURES
 FAILURES=()
 typeset -a RESULTS
@@ -65,6 +75,16 @@ cleanup() {
   set +e
   echo ""
   echo "▸ Cleaning up…"
+
+  # IME(입력 소스) 복원을 '가장 먼저' 한다. 하네스가 한글 두벌식으로 바꿔둔 채
+  # 죽었다면 사용자는 한글 입력에 갇혀 있다 — 클립보드나 문서보다 이게 더 급하다.
+  # 헬퍼 바이너리는 TMP_DIR 안에 있으므로 아래 `rm -rf "$TMP_DIR"` 보다 반드시
+  # 앞에서 실행해야 한다. 우리가 실제로 전환했을 때(IME_SWITCHED=1)만 되돌린다 —
+  # 원래 ABC였던 사용자의 입력 소스를 함부로 건드리지 않기 위해서다.
+  if [[ "$IME_SWITCHED" -eq 1 && -n "$IME_ORIGINAL_SOURCE" && -x "$IME_HELPER_BIN" ]]; then
+    "$IME_HELPER_BIN" "$IME_ORIGINAL_SOURCE" >/dev/null 2>&1 || true
+    echo "  입력 소스 복원됨: $IME_ORIGINAL_SOURCE"
+  fi
 
   # TextEdit 정리.
   #
@@ -479,13 +499,23 @@ cat > "$TMP_DIR/store.json" <<'EOF'
           "enabled": true,
           "createdAt": "2026-01-01T00:00:00Z",
           "modifiedAt": "2026-01-01T00:00:00Z"
+        },
+        {
+          "id": "E2E5A000-0000-4000-8000-000000000005",
+          "abbreviation": ";clear",
+          "content": "cleared-ok",
+          "label": "korean layout expansion",
+          "caseSensitive": true,
+          "enabled": true,
+          "createdAt": "2026-01-01T00:00:00Z",
+          "modifiedAt": "2026-01-01T00:00:00Z"
         }
       ]
     }
   ]
 }
 EOF
-echo "  스니펫 4개 시딩: ';e2e' → expanded-ok, ';cb' → clip=[%clipboard], 'sig' → SIGNATURE-BLOCK, ';fill' → FILLED-[…]"
+echo "  스니펫 5개 시딩: ';e2e' → expanded-ok, ';cb' → clip=[%clipboard], 'sig' → SIGNATURE-BLOCK, ';fill' → FILLED-[…], ';clear' → cleared-ok"
 
 # ── 3. 격리된 저장소로 SnipKey 실행 ─────────────────────────────────────────
 echo "▸ Launching SnipKey against the temp store…"
@@ -1263,6 +1293,208 @@ EOF
   fi
 }
 
+# ── (l) 한글 두벌식 상태에서 물리 키 약어가 확장된다 (레이아웃 기반 매칭) ────
+# 새로 붙인 기능: 키보드가 한글(두벌식) IME일 때 사용자가 약어의 '물리 QWERTY 키'를
+# 치면, 화면에는 한글 자모가 조합돼 보여도 확장이 발화한다. 엔진이 화면 표시(조합)
+# 버퍼와 나란히 keyCode→US 문자로 만든 물리 키 버퍼를 유지하고 둘 다로 매칭하기
+# 때문이다(ABC 모드에서는 조합 버퍼가 우선이라 이중 발화가 없다).
+#
+# 왜 send_key_code 인가 (type_text 가 아니라):
+#   type_text 는 System Events `keystroke` 로 '문자'를 넣는다 — 이건 IME를 거치지
+#   않고 그 문자 그대로 앱에 박힌다. 그러면 한글 IME가 켜져 있어도 ';clear'라는
+#   ASCII가 그대로 들어가 이 기능을 전혀 시험하지 못한다. send_key_code 는 System
+#   Events `key code N` 으로 '물리 키'를 누른다 — 이건 활성 IME를 거치므로, 한글
+#   IME가 켜져 있으면 자모로 조합된다. 물리 키 경로를 시험하려면 반드시 이쪽이어야 한다.
+#
+# 삭제 개수(backspaces=N):
+#   삭제는 '화면에 조합돼 보이는 글자 수'만큼 해야 한다 — 친 물리 키 6개가 아니라.
+#   ';clear'(물리 6키)는 두벌식에서 ';' + 조합된 한글 몇 글자(예: ';칟ㅁㄱ' 꼴)로
+#   보이며, 조합 글자 수는 6보다 적다. 그래서 N을 로그에서 뽑아 pass 메시지에
+#   '두드러지게' 실어 보낸다 — 사람이 화면의 조합 글자 수와 N이 같은지 눈으로
+#   확인해야 하는, 이 케이스의 유일한 손-관측 변수다. 정확한 조합 글자 수를
+#   코드가 단정할 수 없으므로 특정 N으로 하드-실패시키지 않는다: matched 와
+#   inject start 만 단언하고 N은 표면화한다.
+#
+# 물리 키코드(US ANSI): ';'=41, c=8, l=37, e=14, a=0, r=15.
+# ';' 는 구두점이므로 즉시-발화 약어다(종결자 불필요).
+
+# IME 전환 헬퍼를 컴파일한다. System Events 로는 입력 소스를 직접 고를 수 없어서,
+# case (k)의 클릭 합성기와 같은 방식으로 Carbon TIS API를 쓰는 작은 Swift 바이너리를
+# swiftc 로 $TMP_DIR 에 만든다. 인터페이스:
+#   e2e-ime current          → 현재 입력 소스 ID를 stdout 으로 출력(복원용으로 붙잡아 둔다)
+#   e2e-ime <source-id>      → 그 입력 소스를 선택. 없거나 비활성이면 non-zero 로 종료
+# TISCreateInputSourceList(props, false) 는 '활성화된' 소스만 돌려주므로, 두벌식이
+# 설치·활성화돼 있지 않으면 찾지 못하고 non-zero 로 끝난다 — 케이스는 그걸 보고
+# 제품 실패가 아니라 SKIP 성격의 안내(두벌식을 켜라)를 낸다.
+compile_ime_helper() {
+  IME_HELPER_BIN="$TMP_DIR/e2e-ime"
+  [[ -x "$IME_HELPER_BIN" ]] && return 0
+  cat > "$TMP_DIR/ime.swift" <<'SWIFT'
+import Carbon
+import Foundation
+
+// 현재 키보드 입력 소스의 ID 문자열. 전환 전에 붙잡아 두고 끝나면 되돌린다.
+func currentSourceID() -> String? {
+  guard let src = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else { return nil }
+  guard let ptr = TISGetInputSourceProperty(src, kTISPropertyInputSourceID) else { return nil }
+  return Unmanaged<CFString>.fromOpaque(ptr).takeUnretainedValue() as String
+}
+
+// 주어진 ID의 입력 소스를 선택한다. includeAllInstalled=false 이므로 '활성화된'
+// 소스만 후보에 든다 — 두벌식이 System Settings 에서 켜져 있지 않으면 여기서 nil.
+func selectSource(id: String) -> Bool {
+  let props = [kTISPropertyInputSourceID as String: id] as CFDictionary
+  guard let cfList = TISCreateInputSourceList(props, false)?.takeRetainedValue(),
+        let list = cfList as? [TISInputSource], let src = list.first else {
+    return false
+  }
+  return TISSelectInputSource(src) == noErr
+}
+
+let args = CommandLine.arguments
+guard args.count >= 2 else {
+  FileHandle.standardError.write("usage: e2e-ime <current|source-id>\n".data(using: .utf8)!)
+  exit(2)
+}
+
+if args[1] == "current" {
+  if let id = currentSourceID() { print(id); exit(0) }
+  exit(1)
+} else {
+  if selectSource(id: args[1]) { exit(0) }
+  FileHandle.standardError.write("input source not available/enabled: \(args[1])\n".data(using: .utf8)!)
+  exit(1)
+}
+SWIFT
+  swiftc "$TMP_DIR/ime.swift" -o "$IME_HELPER_BIN" 2>/dev/null
+}
+
+# 현재 입력 소스가 ABC/US(라틴 자판)인지 검사하는 술어. wait_for 와 함께 폴링에 쓴다.
+# e2e-ime current 는 현재 활성 입력 소스 ID를 출력한다. 그게 ABC 나 US 면 0(참).
+ime_is_latin() {
+  local cur
+  cur=$("$IME_HELPER_BIN" current 2>/dev/null) || return 1
+  [[ "$cur" == "com.apple.keylayout.ABC" || "$cur" == "com.apple.keylayout.US" ]]
+}
+
+# ABC/US 로 되돌린 뒤 '실제로 반영됐는지'를 검증한다. 성공을 절대 가정하지 않는다.
+#
+# 왜 가정하면 안 되나: TISSelectInputSource 가 noErr(성공)를 돌려줘도, 실제 활성
+# 입력 소스 전환은 비동기라 그 즉시 바뀌지 않을 수 있다. positive control 이
+# 실패했던 원인이 바로 이것이다 — 하네스 시작 시점의 '진짜 원래 소스'가 이미 한글
+# 두벌식이었고(cleanup 로그가 그렇게 남았다), select 를 fire-and-forget 로 던진 뒤
+# 반영을 확인하지 않은 채 positive control 을 돌리자, ';e2e' 가 여전히 한글 IME를
+# 거쳐 자모로 먹히면서 'inject start' 가 0회가 됐다. 그래서 여기서는 select 후
+# e2e-ime current 로 라틴 자판이 될 때까지 폴링해 '확정'한다.
+#
+# select 를 최대 3회 시도하고 매번 wait_for(2초) 로 라틴이 될 때까지 기다린다.
+# 검증되면 0, 끝내 라틴이 아니면 1 을 반환한다(호출부가 이걸로 분기한다).
+restore_to_abc_verified() {
+  local attempt
+  for attempt in 1 2 3; do
+    "$IME_HELPER_BIN" com.apple.keylayout.ABC >/dev/null 2>&1 \
+      || "$IME_HELPER_BIN" com.apple.keylayout.US >/dev/null 2>&1 || true
+    if wait_for 2 ime_is_latin; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_case_korean_layout_expansion() {
+  local name="(l) physical-key abbreviation expands in Hangul 2-Set (layout-aware matching)"
+  new_document || { fail "$name" "TextEdit 준비 실패"; return; }
+  clear_engine_buffer
+
+  if ! compile_ime_helper; then
+    fail "$name" "IME 전환 헬퍼 컴파일 실패 — 이 경로를 측정할 수 없다"
+    return
+  fi
+
+  # 원래 입력 소스를 붙잡아 둔다. cleanup 이 이걸로 되돌린다. 읽기에 실패하면
+  # 안전한 기본값(ABC)을 둬서, 전환 후 하네스가 죽어도 cleanup 이 반드시 복원 대상을
+  # 갖게 한다 — 이게 없으면 사용자가 한글 입력에 갇힌다.
+  IME_ORIGINAL_SOURCE=$("$IME_HELPER_BIN" current 2>/dev/null) || IME_ORIGINAL_SOURCE=""
+  [[ -z "$IME_ORIGINAL_SOURCE" ]] && IME_ORIGINAL_SOURCE="com.apple.keylayout.ABC"
+
+  # 한글 두벌식으로 전환한다. 실패하면 두벌식이 안 켜져 있는 것이므로, 제품 실패가
+  # 아니라 SKIP 성격으로 안내하고 끝낸다. 전환하지 못했으니 IME_SWITCHED 는 0 그대로.
+  if ! "$IME_HELPER_BIN" com.apple.inputmethod.Korean.2SetKorean 2>/dev/null; then
+    fail "$name" "SKIP: 한글 두벌식 입력 소스를 켤 수 없다. System Settings → 키보드 → 입력 소스에서 '두벌식'을 추가·활성화한 뒤 다시 실행해라. (제품 실패가 아니다)"
+    return
+  fi
+  # 여기부터 우리가 IME를 바꿨다 — cleanup 이 원래대로 되돌릴 책임을 진다.
+  IME_SWITCHED=1
+  sleep 0.6  # IME 전환이 실제로 반영될 때까지 한 박자.
+
+  local mark=$(log_lines)
+
+  # ';clear' 의 물리 키를 순서대로 보낸다. type_text 가 아니라 send_key_code 여야
+  # 활성 IME(두벌식)를 거쳐 화면에는 한글 자모로 조합된다. ';' 는 구두점이라 즉시 발화.
+  send_key_code 41   # ;
+  send_key_code 8    # c
+  send_key_code 37   # l
+  send_key_code 14   # e
+  send_key_code 0    # a
+  send_key_code 15   # r
+
+  # 확장(백스페이스 + 붙여넣기)이 결론까지 가도록 기다린다.
+  sleep 3
+
+  # 판정 뒤에 오는 케이스(c)는 type_text(=keystroke)로 ';cb'를 친다. 두벌식이 켜져
+  # 있으면 그 ASCII 마저 IME에 먹혀 자모가 될 수 있으므로, 다음 케이스가 라틴 자판에서
+  # 돌 수 있도록 best-effort 로 ABC/US 복원을 시도한다. 이 머신처럼 두벌식만 설치돼
+  # 있으면(활성 입력 소스에 ABC/US가 아예 없으면) 복원이 안 될 수 있으나, 그건 이 케이스의
+  # 판정과 무관하다 — 판정은 아래 엔진 로그로만 한다. IME_SWITCHED 는 1 그대로 두어,
+  # cleanup() 이 종료 시 '진짜 원래 소스'로 최종 복원하게 한다(원래가 ABC였다면 무해한 중복).
+  restore_to_abc_verified || true
+
+  local logged
+  logged=$(log_since "$mark")
+
+  # 판정은 오직 엔진 로그로만 한다. 조합 버퍼는 한글 자모를 들고 있어도, 물리 키 버퍼가
+  # ';clear' 로 매치돼야 한다. 이 'via physical' 매치 자체가 '물리 키가 엔진에 도달했다'는
+  # 증거다.
+  #
+  # 왜 이 케이스엔 ASCII positive control 이 없나:
+  #   positive control 은 원래 ABC/US 로 전환해 ASCII ';e2e' 를 쳐서 '키 입력 경로가
+  #   살아 있음'을 따로 증명했다. 그러나 이 머신은 활성 입력 소스에 ABC/US 가 아예 없고
+  #   두벌식만 설치돼 있을 수 있다(영문은 별도 소스가 아니라 두벌식 내부의 한/영 토글로
+  #   낸다). 그런 머신에서는 ABC 로 전환해 ASCII 를 칠 방법이 없어 positive control 이
+  #   환경 탓으로 늘 실패했다. 하지만 위 'matched ... via physical' 로그가 곧 '물리 키가
+  #   엔진에 도달해 매치까지 갔다'는 직접 증거이므로, 별도의 ASCII positive control 은
+  #   불필요하고 환경-취약하다. 그래서 제거하고, 판정을 물리 매치 + 삭제 개수로 통합한다.
+  local matched_physical=0
+  echo "$logged" | grep -q "matched ';clear' via physical" && matched_physical=1
+
+  # 삭제 개수는 '화면에 조합돼 보이는 글자 수'와 정확히 같아야 한다 — 친 물리 키 6개가
+  # 아니라. ';clear' 를 두벌식으로 치면 화면에는 ';칟ㅁㄱ'(= 4글자)로 조합된다.
+  # 이 4가 회귀 가드다: 레이아웃 오토마톤이 깨져 다시 6(=친 물리 키 수)을 지우려 하면
+  # 이 단언이 실패한다. 그래서 정확한 값 4를 하드-단언한다(예전처럼 표면화만 하지 않는다).
+  local expected_backspaces=4   # 화면 조합 글자 수: ';칟ㅁㄱ' = 4
+  local inject_line
+  inject_line=$(echo "$logged" | grep "inject start" | head -1)
+  local n
+  n=$(echo "$inject_line" | sed -n 's/.*backspaces=\([0-9]*\).*/\1/p')
+
+  if [[ "$matched_physical" -eq 0 ]]; then
+    fail "$name" "물리 키 ';clear' 를 쳤는데 'matched ... via physical' 로그가 없다 — 물리 키 버퍼 매칭이 동작하지 않았다(혹은 두벌식이 아니라 물리 키가 IME를 거치지 않았다). 로그: $(echo "$logged" | grep -E "matched|inject" | tr '\n' ' ')"
+    return
+  fi
+  if [[ -z "$inject_line" ]]; then
+    fail "$name" "matched ';clear' via physical 는 있으나 'inject start' 로그가 없다 — 엔진이 주입을 시작하지 않았다. 로그: $(echo "$logged" | tr '\n' ' ')"
+    return
+  fi
+  if [[ "$n" != "$expected_backspaces" ]]; then
+    fail "$name" "삭제 개수가 backspaces=${n} — 기대: ${expected_backspaces}(화면 조합 글자 수 ';칟ㅁㄱ'=4). 오토마톤이 친 물리 키 수(6)를 지우려 하면 회귀다. 로그: $(echo "$logged" | grep -E "matched|inject" | tr '\n' ' ')"
+    return
+  fi
+
+  # 물리 매치('via physical') + 삭제 개수(=4) 둘 다 통과. 이 케이스는 이제 '물리 키 매칭'과
+  # '조합 글자 수 기반 삭제 개수' 양쪽의 실질적 회귀 테스트다.
+  pass "$name  (물리 키 ';clear' → 'via physical' 매치 + backspaces=${n} 정확 — 물리 매칭·삭제 개수 회귀 가드 통과)"
+}
+
 run_case_plain_expansion
 run_case_substring_no_expansion
 run_case_word_prefix_no_expansion
@@ -1273,6 +1505,7 @@ run_case_typing_ahead_aborts_expansion
 run_case_fill_in_typing_after_panel_aborts
 run_case_focus_change_during_settle_aborts
 run_case_same_app_click_aborts
+run_case_korean_layout_expansion
 run_case_clipboard_preserved
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────
