@@ -1505,8 +1505,11 @@ run_case_typing_ahead_aborts_expansion
 run_case_fill_in_typing_after_panel_aborts
 run_case_focus_change_during_settle_aborts
 run_case_same_app_click_aborts
-run_case_korean_layout_expansion
 run_case_clipboard_preserved
+# 한글 케이스는 반드시 맨 마지막에 둔다. 두벌식으로 입력 소스를 전환하는데,
+# 개발기에 라틴(ABC/US) 레이아웃이 없으면 복원이 안 돼 IME가 두벌식 상태로 남는다.
+# 이 케이스를 앞에 두면 뒤 케이스(예: clipboard)의 type_text가 그 잔재로 오염된다.
+run_case_korean_layout_expansion
 
 # ── 6. 요약 ─────────────────────────────────────────────────────────────────
 echo ""

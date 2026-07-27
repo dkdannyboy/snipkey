@@ -227,8 +227,19 @@ final class ExpansionEngine {
             layout.clear()
         }
 
+        // 물리 폴백은 두벌식에서만 허용한다. 세벌식·일본어·중국어·미지의 IME에서는
+        // 물리 키 삭제 수 계산(두벌식 전용 오토마톤)이 틀려 앞 텍스트를 훼손할 수
+        // 있으므로 표시 버퍼 매칭만 남긴다. TIS가 nil/미지를 주면 '두벌식 아님'으로
+        // 처리해 물리 폴백을 끈다(페일세이프).
+        //
+        // 이벤트 탭 핫패스에서 키 입력마다 TIS를 읽지만, 입력 소스 조회는 값싸고
+        // 캐시 무효화(입력 소스 변경 관찰)를 추가하는 쪽이 오히려 정합성 위험을 키우므로
+        // 가장 단순·정확한 '매 키 직접 조회'를 택한다.
+        let allowPhysicalFallback = isTwoSetKoreanSourceID(currentInputSourceID() ?? "")
+
         guard let decision = LayoutAwareMatcher.decide(
-            composedBuffer: buffer, layout: layout, matcher: store.matcher
+            composedBuffer: buffer, layout: layout, matcher: store.matcher,
+            allowPhysicalFallback: allowPhysicalFallback
         ) else { return }
 
         Log.write("matched '\(decision.match.snippet.abbreviation)' via \(decision.source)")
@@ -240,6 +251,21 @@ final class ExpansionEngine {
         DispatchQueue.main.async { [weak self] in
             self?.expand(decision, quiescence: quiescence)
         }
+    }
+
+    /// 현재 입력 소스(IME)의 ID를 읽는다. 예: "com.apple.inputmethod.Korean.2SetKorean".
+    ///
+    /// HotkeyManager.keyName은 '키보드 배열'(TISCopyCurrentKeyboardLayoutInputSource)을
+    /// 읽지만, 여기서는 두벌식/일본어 같은 '입력 방식'을 구분해야 하므로
+    /// TISCopyCurrentKeyboardInputSource + kTISPropertyInputSourceID를 쓴다. TIS가
+    /// 아무것도 못 주면 nil을 돌려주고, 호출부는 이를 '두벌식 아님'으로 처리한다(페일세이프).
+    ///
+    /// @MX:NOTE: [AUTO] 입력 '방식' ID 조회. keyName의 배열 ID 조회와 목적이 다르다.
+    private func currentInputSourceID() -> String? {
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let ptr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
+        else { return nil }
+        return Unmanaged<CFString>.fromOpaque(ptr).takeUnretainedValue() as String
     }
 
     // MARK: - Expansion

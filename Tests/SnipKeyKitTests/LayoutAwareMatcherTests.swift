@@ -59,7 +59,8 @@ final class LayoutAwareMatcherTests: XCTestCase {
         XCTAssertNotNil(m.match(buffer: layout.physical))
 
         let decision = LayoutAwareMatcher.decide(
-            composedBuffer: composedBuffer, layout: layout, matcher: m
+            composedBuffer: composedBuffer, layout: layout, matcher: m,
+            allowPhysicalFallback: true
         )
         XCTAssertEqual(decision?.source, .composed)
         XCTAssertEqual(decision?.match.snippet.abbreviation, ";clear")
@@ -87,8 +88,10 @@ final class LayoutAwareMatcherTests: XCTestCase {
             "표시 버퍼가 약어와 일치하면 이 테스트는 물리 경로를 검증하지 못한다"
         )
 
+        // 게이트가 열려 있어야(두벌식) 물리 폴백이 동작한다.
         let decision = LayoutAwareMatcher.decide(
-            composedBuffer: composedBuffer, layout: layout, matcher: m
+            composedBuffer: composedBuffer, layout: layout, matcher: m,
+            allowPhysicalFallback: true
         )
         XCTAssertEqual(decision?.source, .physical)
         XCTAssertEqual(decision?.match.snippet.abbreviation, ";clear")
@@ -98,6 +101,51 @@ final class LayoutAwareMatcherTests: XCTestCase {
         XCTAssertEqual(decision?.terminator, "")  // 구두점 시작 약어는 종결자 없음
     }
 
+    // MARK: - 물리 폴백 게이트: 두벌식이 아니면 물리 매치를 억제
+
+    /// 물리 키는 ";clear"를 이루지만(표시 버퍼는 어떤 약어와도 불일치),
+    /// 게이트가 닫혀 있으면(두벌식 아님: 세벌식·일본어·중국어·미지 IME) 물리 폴백을
+    /// 건너뛰어 결정은 nil이어야 한다 — 기능 도입 이전과 동일하게 발화하지 않는다.
+    /// 이 테스트가 게이트의 핵심 안전장치를 증명한다.
+    func testPhysicalOnlyMatchSuppressedWhenGateFalse() {
+        let m = makeMatcher([snippet(";clear", "CLEARED")])
+        var layout = LayoutBuffer()
+        let composedJamo = [";", jamoC, jamoL, jamoE, jamoA, jamoR]
+        let physicalKeys: [Character] = [";", "c", "l", "e", "a", "r"]
+        for i in physicalKeys.indices {
+            layout.appendLiteral(composed: composedJamo[i], physical: physicalKeys[i])
+        }
+        let composedBuffer = composedJamo.joined()
+        // 사전조건: 물리 버퍼는 실제로 매치된다(게이트만 억제 요인임을 못박는다).
+        XCTAssertNotNil(m.match(buffer: layout.physical))
+        XCTAssertNil(m.match(buffer: composedBuffer))
+
+        let decision = LayoutAwareMatcher.decide(
+            composedBuffer: composedBuffer, layout: layout, matcher: m,
+            allowPhysicalFallback: false
+        )
+        XCTAssertNil(decision, "게이트가 닫히면 물리 전용 매치는 발화하지 않아야 한다")
+    }
+
+    /// 게이트가 닫혀 있어도 표시 버퍼 매치는 그대로 발화해야 한다 — 게이트는 물리
+    /// 폴백만 끄고 composed 경로는 한 글자도 바꾸지 않음을 증명한다(영문/ABC 불변).
+    func testComposedMatchStillFiresWhenGateFalse() {
+        let m = makeMatcher([snippet(";clear", "CLEARED")])
+        var layout = LayoutBuffer()
+        let keys: [(String, Character)] =
+            [(";", ";"), ("c", "c"), ("l", "l"), ("e", "e"), ("a", "a"), ("r", "r")]
+        for (composed, physical) in keys {
+            layout.appendLiteral(composed: composed, physical: physical)
+        }
+        let decision = LayoutAwareMatcher.decide(
+            composedBuffer: ";clear", layout: layout, matcher: m,
+            allowPhysicalFallback: false
+        )
+        XCTAssertEqual(decision?.source, .composed)
+        XCTAssertEqual(decision?.match.snippet.abbreviation, ";clear")
+        XCTAssertEqual(decision?.backspaces, 6)
+    }
+
     /// 약어가 없으면 어느 버퍼로도 발화하지 않는다.
     func testNoMatchReturnsNil() {
         let m = makeMatcher([snippet(";clear", "CLEARED")])
@@ -105,7 +153,10 @@ final class LayoutAwareMatcherTests: XCTestCase {
         for (c, p) in [("x", Character("x")), ("y", Character("y"))] {
             layout.appendLiteral(composed: c, physical: p)
         }
-        XCTAssertNil(LayoutAwareMatcher.decide(composedBuffer: "xy", layout: layout, matcher: m))
+        XCTAssertNil(LayoutAwareMatcher.decide(
+            composedBuffer: "xy", layout: layout, matcher: m,
+            allowPhysicalFallback: true
+        ))
     }
 
     // MARK: - 재현 테스트(수정 전 반드시 실패)
