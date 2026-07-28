@@ -124,6 +124,12 @@ private struct InlineSearchView: View {
     @State private var keyMonitor: Any?
     @FocusState private var searchFocused: Bool
 
+    /// 호버가 일으킨 selection 변경일 때 자동 스크롤을 딱 한 번 건너뛰기 위한 플래그.
+    /// 호버 → 스크롤 → (정지된 커서 밑으로 행이 밀려 올라감) → 새 행 호버 → … 로
+    /// 마지막 행까지 폭주하던 피드백 루프를 끊는다. 키보드(화살표) 이동은 이 플래그를
+    /// 세우지 않으므로 선택 행은 평소대로 가운데로 스크롤된다.
+    @State private var suppressScrollOnSelectionChange = false
+
     private let maxResults = 50
 
     private var hits: [SearchHit] {
@@ -257,12 +263,28 @@ private struct InlineSearchView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { onPick(hit.snippet) }
                         .onHover { inside in
-                            if inside { selection = index }
+                            // 커서가 지금 올라와 있는 행만 선택한다. 이미 선택된 행이면
+                            // 아무것도 하지 않는다 — selection을 같은 값으로 다시 넣으면
+                            // onChange가 안 불려 억제 플래그가 소비되지 않고 남아, 바로
+                            // 다음 키보드 이동의 스크롤을 잘못 삼켜버린다.
+                            guard inside, selection != index else { return }
+                            // 호버발 변경이니 이번 onChange에서는 스크롤을 억제한다.
+                            suppressScrollOnSelectionChange = true
+                            selection = index
                         }
                     }
                 }
             }
             .onChange(of: selection) { new in
+                // 호버가 일으킨 변경이면 스크롤하지 않는다. 스크롤하면 정지된 커서 밑으로
+                // 행이 밀려 올라가고, 새로 커서에 닿은 행의 .onHover가 또 selection을 바꿔
+                // 마지막 행까지 폭주하는 루프가 된다. 여기서 스크롤을 끊으면 행이 움직이지
+                // 않으니 커서 밑 행도 그대로라 연쇄가 시작되지 않는다.
+                if suppressScrollOnSelectionChange {
+                    suppressScrollOnSelectionChange = false
+                    return
+                }
+                // 키보드(화살표) 이동은 플래그가 false라 선택 행을 가운데로 스크롤한다.
                 withAnimation(.easeOut(duration: 0.12)) {
                     proxy.scrollTo(new, anchor: .center)
                 }
