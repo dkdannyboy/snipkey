@@ -231,6 +231,13 @@ private struct InlineSearchView: View {
                 .buttonStyle(.plain)
                 .help(loc.s("common.clear"))
             }
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(loc.s("search.hint.close"))
+            .accessibilityLabel(loc.s("search.hint.close"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -319,7 +326,7 @@ private struct InlineSearchRow: View {
     let isSelected: Bool
 
     private var preview: String {
-        hit.snippet.content
+        MacroPreview.render(hit.snippet.content)
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespaces)
     }

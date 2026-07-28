@@ -32,6 +32,11 @@ public enum SnippetSearch {
     ///   4. content contains the query
     /// Ties break on the shorter abbreviation, then alphabetically, so results
     /// do not jump around between keystrokes.
+    ///
+    /// 약어는 보통 트리거 기호(`~`, `!`, `#`, `;`, `@`, `/` …)로 시작하므로, 맨몸
+    /// 단어로 검색할 때 그 기호가 정확·접두 일치를 막지 않도록 선두 기호를 벗긴
+    /// "단어부"에도 같은 등급을 매긴다. 기호까지 쳐서 검색한 경우를 위해 원본 약어
+    /// 검사는 그대로 남겨 기존 동작을 보존한다.
     public static func run(
         query: String,
         in groups: [SnippetGroup],
@@ -74,13 +79,27 @@ public enum SnippetSearch {
         let label = snippet.label.lowercased()
         let content = snippet.content.lowercased()
 
-        if abbreviation == needle { return 100 }
-        if abbreviation.hasPrefix(needle) { return 90 }
+        // 선두 트리거 기호를 벗긴 약어의 "단어부". "~clear" → "clear".
+        let bareAbbreviation = strippingLeadingSigils(abbreviation)
+
+        // 정확·접두 등급은 원본 약어와 단어부 중 하나라도 맞으면 인정한다.
+        if abbreviation == needle || bareAbbreviation == needle { return 100 }
+        if abbreviation.hasPrefix(needle) || bareAbbreviation.hasPrefix(needle) { return 90 }
         if abbreviation.contains(needle) { return 70 }
         if label.hasPrefix(needle) { return 60 }
         if label.contains(needle) { return 50 }
         if content.contains(needle) { return 30 }
         return nil
+    }
+
+    /// 약어 선두의 트리거 기호(영문자·숫자가 아닌 문자)를 벗겨 "단어부"를 돌려준다.
+    /// 예: "~clear" → "clear", "!gt1" → "gt1", ";;x" → "x". 기호뿐인 약어는 ""가 된다.
+    private static func strippingLeadingSigils(_ abbreviation: String) -> String {
+        var rest = Substring(abbreviation)
+        while let first = rest.first, !first.isLetter, !first.isNumber {
+            rest = rest.dropFirst()
+        }
+        return String(rest)
     }
 }
 
