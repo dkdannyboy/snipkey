@@ -1,0 +1,49 @@
+{
+  "expansionCount" : 0,
+  "groups" : [
+    {
+      "enabled" : true,
+      "id" : "DF9252C1-C3E4-40FD-A719-F28AE0E776AC",
+      "name" : "Fixture Group",
+      "snippets" : [
+        {
+          "abbreviation" : "~fx1",
+          "caseSensitive" : true,
+          "content" : "fixture expansion one",
+          "createdAt" : "2023-09-08T06:49:03Z",
+          "enabled" : true,
+          "id" : "AF8FA39B-DA69-4DD9-98BE-4C9CFB37902D",
+          "label" : "Fixture One",
+          "modifiedAt" : "2023-09-08T06:49:15Z"
+        },
+        {
+          "abbreviation" : "~fx2",
+          "caseSensitive" : false,
+          "content" : "한국어 확장 테스트",
+          "createdAt" : "2023-09-08T06:49:22Z",
+          "enabled" : true,
+          "id" : "3EB44C9F-E7F5-4003-B92A-36D173BDD846",
+          "label" : "",
+          "modifiedAt" : "2023-09-08T14:09:13Z"
+        }
+      ]
+    }
+  ],
+  "macros" : [
+
+  ],
+  "settings" : {
+    "clipboardRestoreDelay" : 0.35,
+    "didFinishOnboarding" : false,
+    "excludedBundleIDs" : [
+
+    ],
+    "expansionEnabled" : true,
+    "inlineSearchEnabled" : true,
+    "inlineSearchKeyCode" : 44,
+    "inlineSearchModifiers" : 256,
+    "playSoundOnExpand" : true,
+    "undoWithBackspace" : true
+  },
+  "version" : 2
+}

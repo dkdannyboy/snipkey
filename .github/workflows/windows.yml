@@ -1,0 +1,46 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, test and package
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Test core
+        run: dotnet test tests/SnipKey.Core.Tests
+
+      - name: Publish
+        shell: bash
+        run: ./scripts/publish.sh
+
+      # 배포된 exe 를 실제로 띄워 핵심 경로를 확인한다(창·키보드 훅 없이).
+      - name: Self check
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist/SnipKey.exe -ArgumentList "--selfcheck" -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "selfcheck failed ($($p.ExitCode))" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SnipKey-windows-x64
+          path: windows/dist/SnipKey.exe
