@@ -341,7 +341,7 @@ struct SnippetsTab: View {
     private var conflicts: Set<String> { store.conflictingAbbreviations() }
 
     private func conflictKey(_ snippet: Snippet) -> String {
-        snippet.caseSensitive ? snippet.abbreviation : snippet.abbreviation.lowercased()
+        snippet.matchesCaseInsensitively ? snippet.abbreviation.lowercased() : snippet.abbreviation
     }
 
     private func locate(snippetID: UUID) -> (UUID, Snippet)? {
@@ -381,7 +381,10 @@ struct SnippetsTab: View {
     private func duplicate(_ hit: SearchHit) {
         var copy = hit.snippet
         copy.id = UUID()
-        copy.abbreviation = hit.snippet.abbreviation + "2"
+        copy.abbreviation = AbbreviationNaming.duplicate(
+            of: hit.snippet.abbreviation,
+            taken: Set(store.allSnippets.map(\.abbreviation))
+        )
         copy.label = hit.snippet.label.isEmpty ? "" : hit.snippet.label + " copy"
         copy.createdAt = Date()
         copy.modifiedAt = Date()
@@ -574,6 +577,10 @@ struct SnippetEditor: View {
                 Toggle(loc.s("editor.enabled"), isOn: $snippet.enabled)
                 Toggle(loc.s("editor.caseSensitive"), isOn: $snippet.caseSensitive)
                     .help(loc.s("editor.caseSensitive.help"))
+                    // 대소문자 따라가기는 ;Sig·;SIG를 모두 받아야 하므로 구분을 끈 것과 같다.
+                    .disabled(snippet.adaptCase)
+                Toggle(loc.s("editor.adaptCase"), isOn: $snippet.adaptCase)
+                    .help(loc.s("editor.adaptCase.help"))
                 Spacer()
                 Menu(loc.s("editor.insertMacro")) {
                     // 라벨만 현지화한다 — 매크로 구문(%filltext…)은 기능이므로 절대 번역하지 않는다.

@@ -11,7 +11,8 @@ import Foundation
 ///   %clipboard                                         current clipboard text
 ///   %key:enter%  %key:return%  %key:tab%               key press after expansion
 ///   %|                                                 cursor position
-///   %date:FORMAT%                                      date/time (DateFormatter pattern)
+///   %date:FORMAT%  %date:+1d:FORMAT%                   date/time, optional date math
+///   %Y %m %d %B %A … %@+1D                             TextExpander date codes (see DateMacro)
 ///
 /// Unknown %-sequences (e.g. URL-encoded text like %EC%B0%A8) are left as-is.
 public enum MacroToken: Equatable {
@@ -26,6 +27,10 @@ public enum MacroToken: Equatable {
     case key(String)
     case cursor
     case date(format: String)
+    /// TextExpander 날짜 코드 한 개(`Y`, `1m`, `B` …). 앞선 `%@±N단위` 이동이 적용된다.
+    case textExpanderDate(code: String)
+    /// TextExpander 날짜 이동 `%@+1D`. 뒤따르는 TextExpander 날짜 코드에 누적 적용된다.
+    case dateShift(amount: Int, unit: Character)
 }
 
 /// A fill-in field presented to the user before expansion.
@@ -99,6 +104,18 @@ public enum MacroParser {
                 flushText()
                 tokens.append(token)
                 i = content.index(i, offsetBy: consumed)
+                continue
+            }
+            if let shift = DateMacro.textExpanderShift(at: rest) {
+                flushText()
+                tokens.append(.dateShift(amount: shift.amount, unit: shift.unit))
+                i = content.index(i, offsetBy: shift.consumed)
+                continue
+            }
+            if let code = DateMacro.textExpanderCode(at: rest) {
+                flushText()
+                tokens.append(.textExpanderDate(code: code.code))
+                i = content.index(i, offsetBy: code.consumed)
                 continue
             }
             // Not a recognized macro — keep the literal '%'.
@@ -231,33 +248,60 @@ public enum MacroParser {
         case .key(let k): return "%key:\(k)%"
         case .cursor: return "%|"
         case .date(let f): return "%date:\(f)%"
+        case .textExpanderDate(let code): return "%" + code
+        case .dateShift(let amount, let unit): return "%@\(amount < 0 ? "-" : "+")\(abs(amount))\(unit)"
         }
     }
 
     // MARK: - Fill-in fields
 
-    public static func fillFields(in tokens: [MacroToken]) -> [FillField] {
+    /// 토큰마다 필드 번호를 매긴다(필드가 아닌 토큰은 nil). `fillFields`와 `render`가
+    /// **반드시** 같은 번호를 쓰도록 번호 매기기를 이 한 곳에 둔다.
+    ///
+    /// 이름이 같은 필드는 번호를 공유한다 — TextExpander처럼 `%filltext:name=고객%`이
+    /// 두 번 나와도 한 번만 묻고, 두 자리 모두 같은 값으로 채운다. 값 필드(text·area·
+    /// popup)와 구간 토글(part)은 서로 다른 이름 공간이다. 이름이 빈 필드는 공유하지
+    /// 않는다 — 이름 없는 필드 둘은 서로 다른 질문이다.
+    static func fieldAssignments(_ tokens: [MacroToken]) -> (ids: [Int?], fields: [FillField]) {
+        var ids: [Int?] = []
         var fields: [FillField] = []
-        var id = 0
+        var byKey: [String: Int] = [:]
+
+        func assign(_ key: String?, _ make: (Int) -> FillField) -> Int {
+            if let key, let existing = byKey[key] { return existing }
+            let id = fields.count
+            fields.append(make(id))
+            if let key { byKey[key] = id }
+            return id
+        }
+
         for token in tokens {
             switch token {
             case .fillText(let name, let def):
-                fields.append(FillField(id: id, name: name, kind: .text, defaultValue: def))
-                id += 1
+                ids.append(assign(name.isEmpty ? nil : "v|" + name) {
+                    FillField(id: $0, name: name, kind: .text, defaultValue: def)
+                })
             case .fillArea(let name, let def):
-                fields.append(FillField(id: id, name: name, kind: .area, defaultValue: def))
-                id += 1
+                ids.append(assign(name.isEmpty ? nil : "v|" + name) {
+                    FillField(id: $0, name: name, kind: .area, defaultValue: def)
+                })
             case .fillPopup(let name, let options, let def):
-                fields.append(FillField(id: id, name: name, kind: .popup(options: options), defaultValue: def))
-                id += 1
+                ids.append(assign(name.isEmpty ? nil : "v|" + name) {
+                    FillField(id: $0, name: name, kind: .popup(options: options), defaultValue: def)
+                })
             case .fillPartStart(let name, let on):
-                fields.append(FillField(id: id, name: name, kind: .part, defaultValue: on ? "yes" : "no"))
-                id += 1
+                ids.append(assign(name.isEmpty ? nil : "p|" + name) {
+                    FillField(id: $0, name: name, kind: .part, defaultValue: on ? "yes" : "no")
+                })
             default:
-                break
+                ids.append(nil)
             }
         }
-        return fields
+        return (ids, fields)
+    }
+
+    public static func fillFields(in tokens: [MacroToken]) -> [FillField] {
+        fieldAssignments(tokens).fields
     }
 
     public static func hasFillIns(_ tokens: [MacroToken]) -> Bool {
@@ -273,46 +317,54 @@ public enum MacroParser {
 
     /// Produces the final text. `fillValues` maps FillField.id to the value
     /// entered by the user ("yes"/"no" for part toggles).
+    ///
+    /// 선택 구간은 스택으로 추적한다: 바깥 구간이 꺼져 있으면 안쪽은 설정과 무관하게
+    /// 꺼진다. 끝 표시(`%fillpartend%`)가 없는 꺼진 구간은 뒤를 통째로 삼키는 대신
+    /// 포함한다 — 편집기 미리보기(`MacroPreview`)와 같은 규칙이어야 사용자가 본 것과
+    /// 실제로 나가는 것이 같다.
     public static func render(
         tokens: [MacroToken],
         fillValues: [Int: String] = [:],
         clipboard: @autoclosure () -> String = "",
-        now: Date = Date()
+        now: Date = Date(),
+        timeZone: TimeZone = .current,
+        locale: Locale = .current
     ) -> RenderResult {
         var out = ""
         var cursorPosition: Int? = nil // grapheme offset in `out`
         var trailingKeys: [String] = []
-        var fieldID = 0
-        var skippingPart = false
+        let ids = fieldAssignments(tokens).ids
+        // 각 원소는 "이 구간 안에서 출력하는가". 맨 위가 현재 상태다.
+        var partStack: [Bool] = []
+        // TextExpander의 `%@+1D`는 뒤따르는 날짜 코드 전부에 누적 적용된다.
+        var shiftedNow = now
+        let calendar = DateMacro.calendar(timeZone)
+        var emitting: Bool { partStack.last ?? true }
 
-        for token in tokens {
+        func value(at index: Int, fallback: String) -> String {
+            guard let id = ids[index] else { return fallback }
+            return fillValues[id] ?? fallback
+        }
+
+        for (index, token) in tokens.enumerated() {
             if case .fillPartEnd = token {
-                skippingPart = false
+                if !partStack.isEmpty { partStack.removeLast() }
                 continue
             }
             if case .fillPartStart(_, let defaultOn) = token {
-                let value = fillValues[fieldID] ?? (defaultOn ? "yes" : "no")
-                skippingPart = value.lowercased() == "no"
-                fieldID += 1
+                let on = value(at: index, fallback: defaultOn ? "yes" : "no").lowercased() != "no"
+                let closed = hasMatchingEnd(after: index, in: tokens)
+                partStack.append(emitting && (on || !closed))
                 continue
             }
-            if skippingPart {
-                // Fields inside a skipped part still consume their id.
-                switch token {
-                case .fillText, .fillArea, .fillPopup: fieldID += 1
-                default: break
-                }
-                continue
-            }
+            guard emitting else { continue }
             switch token {
             case .text(let s):
                 out += s
             case .fillText(_, let def), .fillArea(_, let def):
-                out += fillValues[fieldID] ?? def
-                fieldID += 1
+                out += value(at: index, fallback: def)
             case .fillPopup(_, let options, let def):
-                out += fillValues[fieldID] ?? (def.isEmpty ? (options.first ?? "") : def)
-                fieldID += 1
+                out += value(at: index, fallback: def.isEmpty ? (options.first ?? "") : def)
             case .snippet(let abbrev):
                 out += "%snippet:\(abbrev)%" // should have been resolved earlier
             case .clipboard:
@@ -321,10 +373,12 @@ public enum MacroParser {
                 trailingKeys.append(k)
             case .cursor:
                 cursorPosition = out.count
-            case .date(let format):
-                let formatter = DateFormatter()
-                formatter.dateFormat = format
-                out += formatter.string(from: now)
+            case .date(let body):
+                out += DateMacro.string(body: body, now: now, timeZone: timeZone, locale: locale)
+            case .textExpanderDate(let code):
+                out += DateMacro.string(textExpanderCode: code, date: shiftedNow, timeZone: timeZone, locale: locale)
+            case .dateShift(let amount, let unit):
+                shiftedNow = DateMacro.shift(shiftedNow, by: amount, unit: unit, calendar: calendar)
             case .fillPartStart, .fillPartEnd:
                 break
             }
@@ -332,5 +386,20 @@ public enum MacroParser {
 
         let offsetFromEnd = cursorPosition.map { out.count - $0 } ?? 0
         return RenderResult(text: out, cursorOffsetFromEnd: offsetFromEnd, trailingKeys: trailingKeys)
+    }
+
+    /// `start`의 구간 시작과 짝이 되는 끝 표시가 있는가(중첩 깊이를 센다).
+    private static func hasMatchingEnd(after start: Int, in tokens: [MacroToken]) -> Bool {
+        var depth = 1
+        for token in tokens[(start + 1)...] {
+            switch token {
+            case .fillPartStart: depth += 1
+            case .fillPartEnd:
+                depth -= 1
+                if depth == 0 { return true }
+            default: break
+            }
+        }
+        return false
     }
 }

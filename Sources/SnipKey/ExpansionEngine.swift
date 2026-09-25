@@ -35,9 +35,43 @@ final class ExpansionEngine {
 
     var isRunning: Bool { eventTap != nil }
 
+    /// 맨 앞 앱의 번들 ID. 앱별 제외 목록(`AppSettings.excludedBundleIDs`) 판정에 쓴다.
+    /// 키마다 NSWorkspace를 묻지 않고, 앱이 바뀔 때 알림으로만 갱신한다.
+    private var frontmostBundleID: String?
+    private var activationObserver: NSObjectProtocol?
+
+    /// 방금 끝난 확장을 되돌릴 계획. 그 뒤 **첫** 사용자 입력이 백스페이스일 때만 쓰이고,
+    /// 다른 어떤 입력(키·클릭·앱 전환)이든 들어오면 버린다.
+    private struct PendingUndo {
+        let plan: ExpansionUndo.Plan
+        let pid: pid_t?
+    }
+    private var pendingUndo: PendingUndo?
+
     init(store: Store, loc: LocalizationManager) {
         self.store = store
         self.loc = loc
+        frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        // 앱이 바뀌면 버퍼도 비운다. 예전에는 클릭·⌘키로만 비워서, 'addr'까지 친 순간
+        // 다른 앱의 대화상자가 포커스를 가져가면 그다음 스페이스가 그 대화상자에서 확장됐다.
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self else { return }
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            self.frontmostBundleID = app?.bundleIdentifier
+            self.buffer = ""
+            self.layout.clear()
+            self.pendingUndo = nil
+        }
+    }
+
+    deinit {
+        if let activationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
+        }
     }
 
     static var hasAccessibilityPermission: Bool {
@@ -143,6 +177,7 @@ final class ExpansionEngine {
             inputClock.mark(at: InputClock.seconds(sinceBootNanos: event.timestamp))
             buffer = ""
             layout.clear()
+            pendingUndo = nil
             return
         }
 
@@ -165,20 +200,37 @@ final class ExpansionEngine {
         // 그러면 멀쩡한 필인 확장이 스스로 취소된다.
         inputClock.mark(at: InputClock.seconds(sinceBootNanos: event.timestamp))
 
-        guard !isSuspended, store.settings.expansionEnabled else {
+        let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = event.flags
+
+        // 확장 직후의 첫 입력이 맨 백스페이스면 확장을 되돌린다. 무엇이든 다른 입력이면
+        // 기회는 사라진다 — 사용자가 이미 다음 일을 시작했다.
+        if let undo = pendingUndo {
+            pendingUndo = nil
+            let plainKey = flags.intersection([.maskCommand, .maskControl, .maskAlternate]).isEmpty
+            if plainKey, store.settings.undoWithBackspace,
+               KeyClassifier.action(forKeyCode: keyCode) == .deleteLast {
+                buffer = ""
+                layout.clear()
+                performUndo(undo)
+                return
+            }
+        }
+
+        guard !isSuspended, store.settings.expansionEnabled,
+              !store.settings.isExcluded(bundleID: frontmostBundleID)
+        else {
             buffer = ""
             layout.clear()
             return
         }
 
-        let flags = event.flags
         if flags.contains(.maskCommand) || flags.contains(.maskControl) {
             buffer = ""
             layout.clear()
             return
         }
 
-        let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         switch KeyClassifier.action(forKeyCode: keyCode) {
         case .deleteLast:
             if !buffer.isEmpty { buffer.removeLast() }
@@ -282,7 +334,8 @@ final class ExpansionEngine {
         // 게다가 사용자는 방금 팔레트에 검색어를 타이핑했으므로 카운터는 반드시
         // 움직여 있다 — 가드를 걸면 팔레트 확장이 100% 취소된다.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.expand(snippet, backspaces: 0, terminator: "", targetApp: app, quiescence: nil)
+            self?.expand(snippet, backspaces: 0, terminator: "", typed: "", fromPhysicalLayout: false,
+                         targetApp: app, quiescence: nil)
         }
     }
 
@@ -297,6 +350,8 @@ final class ExpansionEngine {
             decision.match.snippet,
             backspaces: decision.backspaces,
             terminator: decision.terminator,
+            typed: decision.match.typed,
+            fromPhysicalLayout: decision.source == .physical,
             targetApp: NSWorkspace.shared.frontmostApplication,
             quiescence: quiescence
         )
@@ -306,9 +361,17 @@ final class ExpansionEngine {
         _ snippet: Snippet,
         backspaces: Int,
         terminator: String,
+        typed: String,
+        fromPhysicalLayout: Bool,
         targetApp: NSRunningApplication?,
         quiescence: InputQuiescenceGuard?
     ) {
+        let undo = UndoContext(typed: typed, fromPhysicalLayout: fromPhysicalLayout)
+        // 대소문자 따라가기는 매크로·필인이 모두 전개된 결과에 적용한다(종결자 제외).
+        // 팔레트 확장은 아무것도 치지 않았으므로(typed == "") 저장된 그대로 나간다.
+        let adapt: (String) -> String = snippet.adaptCase && !typed.isEmpty
+            ? { CaseAdapter.adapt($0, typed: typed, abbreviation: snippet.abbreviation) }
+            : { $0 }
         let resolved = MacroParser.resolveNested(snippet.content) { [weak self] abbrev in
             self?.store.snippet(forAbbreviation: abbrev)?.content
         }
@@ -318,6 +381,8 @@ final class ExpansionEngine {
             inject(
                 tokens: tokens,
                 fillValues: [:],
+                adapt: adapt,
+                undo: undo,
                 backspaces: backspaces,
                 terminator: terminator,
                 targetPID: targetApp?.processIdentifier,
@@ -345,6 +410,8 @@ final class ExpansionEngine {
             self?.showFillInPanel(
                 snippet: snippet,
                 tokens: tokens,
+                adapt: adapt,
+                undo: undo,
                 backspaces: backspaces,
                 terminator: terminator,
                 targetApp: targetApp,
@@ -370,6 +437,8 @@ final class ExpansionEngine {
     private func showFillInPanel(
         snippet: Snippet,
         tokens: [MacroToken],
+        adapt: @escaping (String) -> String,
+        undo: UndoContext,
         backspaces: Int,
         terminator: String,
         targetApp: NSRunningApplication?,
@@ -406,6 +475,8 @@ final class ExpansionEngine {
                 self.inject(
                     tokens: tokens,
                     fillValues: values,
+                    adapt: adapt,
+                    undo: undo,
                     backspaces: backspaces,
                     terminator: terminator,
                     targetPID: targetApp?.processIdentifier,
@@ -420,6 +491,8 @@ final class ExpansionEngine {
     private func inject(
         tokens: [MacroToken],
         fillValues: [Int: String],
+        adapt: (String) -> String,
+        undo: UndoContext,
         backspaces: Int,
         terminator: String,
         targetPID: pid_t?,
@@ -436,7 +509,7 @@ final class ExpansionEngine {
         // 종결자는 이미 사용자가 쳤고 백스페이스로 함께 지워졌다. 매크로·필인이
         // 모두 전개된 '뒤'에 다시 붙여야 사용자가 친 그 자리에 그대로 남는다.
         // 커서 매크로(%|%)가 있으면 그 위치가 밀리지 않도록 오프셋도 함께 민다.
-        var text = result.text
+        var text = adapt(result.text)
         var cursorOffsetFromEnd = result.cursorOffsetFromEnd
         if !terminator.isEmpty {
             text += terminator
@@ -444,6 +517,15 @@ final class ExpansionEngine {
                 cursorOffsetFromEnd += terminator.count
             }
         }
+
+        let undoPlan = ExpansionUndo.plan(
+            inserted: text,
+            typed: undo.typed,
+            terminator: terminator,
+            cursorOffsetFromEnd: cursorOffsetFromEnd,
+            trailingKeys: result.trailingKeys,
+            fromPhysicalLayout: undo.fromPhysicalLayout
+        )
 
         // 지울 글자가 있을 때만 가드를 건다. 백스페이스가 없으면 파괴할 것도 없고
         // (팔레트 확장이 그렇다), 그때 가드를 걸면 정상 확장을 죽이기만 한다.
@@ -466,7 +548,43 @@ final class ExpansionEngine {
             quiescence: check,
             // 실제로 주입이 끝났을 때만 센다. 가드나 포커스 검사에 걸려 버려진 확장은
             // 일어나지 않은 확장이다 — 통계가 그걸 확장이라고 우기면 안 된다.
-            completion: { [weak self] in self?.store.recordExpansion() }
+            completion: { [weak self] in
+                guard let self else { return }
+                self.store.recordExpansion()
+                self.armUndo(plan: undoPlan, quiescence: quiescence, pid: targetPID)
+            }
+        )
+    }
+
+    // MARK: - Undo
+
+    struct UndoContext {
+        let typed: String
+        let fromPhysicalLayout: Bool
+    }
+
+    /// 주입이 끝난 뒤 되돌리기를 무장한다. 단, 매치 이후 **어떤 입력도 없었을 때만**.
+    ///
+    /// 주입(클립보드 복원 대기 포함) 도중에 사용자가 이미 백스페이스를 눌렀다면, 여기서
+    /// 무장하는 순간 그 다음 백스페이스가 엉뚱하게 확장을 되돌린다. 매치 시점에 무장한
+    /// 입력 가드가 그 사실을 알고 있다.
+    private func armUndo(plan: ExpansionUndo.Plan?, quiescence: InputQuiescenceGuard?, pid: pid_t?) {
+        guard let plan, let quiescence, case .proceed = inputClock.decide(quiescence) else { return }
+        pendingUndo = PendingUndo(plan: plan, pid: pid)
+    }
+
+    private func performUndo(_ undo: PendingUndo) {
+        Log.write("undo expansion (backspaces=\(undo.plan.backspaces))")
+        // 이 백스페이스 뒤로 들어오는 입력은 되돌리기도 취소시킨다 — 확장과 같은 규칙이다.
+        let guardToken = inputClock.arm()
+        let clock = inputClock
+        TextInjector.expand(
+            backspaces: undo.plan.backspaces,
+            text: undo.plan.restore,
+            restoreClipboardAfter: store.settings.clipboardRestoreDelay,
+            playSound: false,
+            expectedPID: undo.pid,
+            quiescence: { clock.decide(guardToken) }
         )
     }
 }

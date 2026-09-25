@@ -35,6 +35,8 @@ struct SettingsTab: View {
             Section {
                 Toggle(loc.s("settings.general.enableExpansion"), isOn: $store.settings.expansionEnabled)
                 Toggle(loc.s("settings.general.playSound"), isOn: $store.settings.playSoundOnExpand)
+                Toggle(loc.s("settings.general.undoWithBackspace"), isOn: $store.settings.undoWithBackspace)
+                    .help(loc.s("settings.general.undoWithBackspace.help"))
                 Toggle(loc.s("settings.general.launchAtLogin"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { enable in
                         do {
@@ -50,6 +52,28 @@ struct SettingsTab: View {
                     }
             } header: {
                 Text(loc.s("settings.general.header"))
+            }
+
+            Section {
+                if store.settings.excludedBundleIDs.isEmpty {
+                    Text(loc.s("settings.excluded.empty"))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(store.settings.excludedBundleIDs, id: \.self) { bundleID in
+                    HStack {
+                        Text(Self.appName(for: bundleID))
+                        Text(bundleID).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button(loc.s("settings.excluded.remove")) {
+                            store.settings.excludedBundleIDs.removeAll { $0 == bundleID }
+                        }
+                    }
+                }
+                Button(loc.s("settings.excluded.add")) { addExcludedApp() }
+            } header: {
+                Text(loc.s("settings.excluded.header"))
+            } footer: {
+                Text(loc.s("settings.excluded.footer"))
             }
 
             Section {
@@ -262,6 +286,26 @@ struct SettingsTab: View {
         }
     }
 
+    private static func appName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
+    private func addExcludedApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [UTType.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+                  !store.settings.excludedBundleIDs.contains(bundleID) else { continue }
+            store.settings.excludedBundleIDs.append(bundleID)
+        }
+    }
+
     private func linkToSnippets() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
@@ -271,6 +315,10 @@ struct SettingsTab: View {
         panel.message = loc.s("settings.sync.linkPanel.message")
         guard panel.runModal() == .OK, let file = panel.url else { return }
         let result = store.linkToSnippets(at: file)
+        guard result.success else {
+            syncMessage = loc.s("settings.sync.linkFailed", result.message ?? "unknown error")
+            return
+        }
         var msg = loc.s("settings.sync.nowSyncing", breadcrumb(for: result.activeLocation))
         if let backup = result.backupURL {
             msg += loc.s("settings.sync.linkBackup", backup.lastPathComponent)

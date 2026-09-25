@@ -19,9 +19,16 @@ public enum MacroPreview {
     ///   - now: 날짜 매크로에 사용할 기준 시각. 테스트에서 고정 값을 주입해
     ///          날짜 출력이 결정론적이 되도록 반드시 주입 가능해야 한다
     ///          (이 코드베이스는 테스트에서 `Date()` 직접 사용을 금지한다).
-    public static func render(_ content: String, now: Date = Date()) -> String {
+    public static func render(
+        _ content: String,
+        now: Date = Date(),
+        timeZone: TimeZone = .current,
+        locale: Locale = .current
+    ) -> String {
         let tokens = MacroParser.parse(content)
         var out = ""
+        var shiftedNow = now
+        let calendar = DateMacro.calendar(timeZone)
         var i = 0
 
         while i < tokens.count {
@@ -81,8 +88,14 @@ public enum MacroPreview {
                 // 커서 마커는 보이지 않는다.
                 break
 
-            case .date(let format):
-                out += formattedDate(format, now: now)
+            case .date(let body):
+                out += formattedDate(body, now: now, timeZone: timeZone, locale: locale)
+
+            case .textExpanderDate(let code):
+                out += DateMacro.string(textExpanderCode: code, date: shiftedNow, timeZone: timeZone, locale: locale)
+
+            case .dateShift(let amount, let unit):
+                shiftedNow = DateMacro.shift(shiftedNow, by: amount, unit: unit, calendar: calendar)
             }
             i += 1
         }
@@ -113,11 +126,9 @@ public enum MacroPreview {
     /// 날짜 포맷을 적용한다. 시스템 로캘/타임존을 쓰는 것은 실제 확장과 동일하게
     /// 맞춘 것이다. 포맷이 비었거나 아무 것도 산출하지 못하면(사실상 잘못된 포맷)
     /// 원본 포맷 문자열을 그대로 보여 준다.
-    private static func formattedDate(_ format: String, now: Date) -> String {
-        guard !format.isEmpty else { return format }
-        let formatter = DateFormatter()
-        formatter.dateFormat = format
-        let result = formatter.string(from: now)
-        return result.isEmpty ? format : result
+    private static func formattedDate(_ body: String, now: Date, timeZone: TimeZone, locale: Locale) -> String {
+        guard !body.isEmpty else { return body }
+        let result = DateMacro.string(body: body, now: now, timeZone: timeZone, locale: locale)
+        return result.isEmpty ? body : result
     }
 }

@@ -22,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("launched from \(Bundle.main.bundlePath) — accessibility trusted: \(ExpansionEngine.hasAccessibilityPermission)")
+        if !store.settings.expansionEnabled {
+            // iCloud로 동기화되는 설정이라, 한쪽 Mac에서 끈 게 조용히 양쪽 다 꺼둔 채로
+            // 남을 수 있다. 다음에 또 이런 일이 생기면 로그만 보고도 바로 알 수 있어야 한다.
+            Log.write("⚠️ expansion is disabled at launch (menu bar toggle is off)")
+        }
         MainMenu.install(loc: loc)
         engine = ExpansionEngine(store: store, loc: loc)
         hotkeys = HotkeyManager(store: store)

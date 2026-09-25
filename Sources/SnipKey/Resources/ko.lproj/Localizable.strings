@@ -89,6 +89,8 @@
 "editor.enabled" = "활성";
 "editor.caseSensitive" = "대소문자 구분";
 "editor.caseSensitive.help" = "끄면 ;SIG와 ;sig 둘 다 확장됩니다";
+"editor.adaptCase" = "대소문자 따라가기";
+"editor.adaptCase.help" = ";Sig로 치면 첫 글자가, ;SIG로 치면 전부 대문자가 됩니다";
 "editor.insertMacro" = "매크로 삽입";
 "editor.content" = "내용";
 "editor.dates" = "생성 %@ · 수정 %@";
@@ -185,6 +187,7 @@
 "settings.sync.savePanel.message" = "클라우드 서비스가 동기화하는 폴더(예: iCloud Drive 내 폴더)를 선택하세요.";
 "settings.sync.savedMessage" = "스니펫 %d개를 %@에 저장했습니다. 이제 SnipKey는 그곳에서 동기화하며, 이전 로컬 복사본은 그대로 둡니다.";
 "settings.sync.saveFailed" = "그곳에 저장할 수 없습니다: %@.";
+"settings.sync.linkFailed" = "그 라이브러리에 연결하지 못했습니다: %@. 지금 쓰는 라이브러리는 그대로입니다.";
 "settings.sync.linkPanel.prompt" = "연결";
 "settings.sync.linkPanel.message" = "동기화 폴더에 있는 기존 SnipKey 스니펫 파일을 선택하세요.";
 "settings.sync.nowSyncing" = "이제 %@에서 동기화합니다.";
@@ -298,3 +301,14 @@
 
 /* MARK: 이주 안내 */
 "warn.textExpanderRunning" = "TextExpander가 아직 실행 중입니다. 종료하지 않으면 두 앱이 각자 확장해 확장이 두 번 나옵니다.";
+
+/* 앱별 제외 · 되돌리기 */
+"status.excludeApp" = "%@에서 확장 안 함";
+"status.secureInput" = "다른 앱에서 보안 입력이 켜져 있어 확장이 멈췄습니다";
+"settings.general.undoWithBackspace" = "백스페이스로 확장 되돌리기";
+"settings.general.undoWithBackspace.help" = "확장 직후 백스페이스를 누르면 입력했던 약어로 되돌립니다";
+"settings.excluded.header" = "제외한 앱";
+"settings.excluded.footer" = "이 앱들에서는 확장하지 않습니다. 메뉴 막대에서 지금 쓰는 앱을 바로 켜고 끌 수도 있습니다.";
+"settings.excluded.empty" = "제외한 앱이 없습니다";
+"settings.excluded.add" = "앱 추가…";
+"settings.excluded.remove" = "제거";

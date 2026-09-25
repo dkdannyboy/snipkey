@@ -120,6 +120,8 @@ public final class Store: ObservableObject {
     public enum DeviceStateKey {
         public static let expansionCount = "SnipKey.device.expansionCount"
         public static let didFinishOnboarding = "SnipKey.device.didFinishOnboarding"
+        /// 확장 켜기/끄기. 예전에는 동기화 파일에 있어서 한 Mac에서 끄면 모든 Mac이 꺼졌다.
+        public static let expansionEnabled = "SnipKey.device.expansionEnabled"
         public static let storeLocationPath = "SnipKey.storeLocationPath"
         // GitHub 별표 프롬프트 상태. 확장 횟수와 마찬가지로 Mac마다 다르고(별표는 사람이
         // 한 번 누르는 것), 동기화되는 문서에 들어가면 안 되므로 장치-로컬에 둔다.
@@ -130,7 +132,26 @@ public final class Store: ObservableObject {
 
     @Published public var groups: [SnippetGroup] { didSet { scheduleSave(); rebuildIndex() } }
     @Published public var macros: [HotkeyMacro] { didSet { scheduleSave() } }
-    @Published public var settings: AppSettings { didSet { scheduleSave() } }
+    /// `expansionEnabled`만은 **장치-로컬**이다(UserDefaults가 권위). 그것만 바뀐 변경은
+    /// 동기화 파일의 편집이 아니므로 저장을 예약하지 않는다 — 예약하면 그 값이 파일을 타고
+    /// 다른 Mac으로 번지고, 이 Mac은 '미저장 편집'이 생긴 것처럼 보여 원격 변경을 거부한다.
+    @Published public var settings: AppSettings {
+        didSet {
+            if settings.expansionEnabled != oldValue.expansionEnabled, !isApplyingExternalState {
+                deviceDefaults.set(settings.expansionEnabled, forKey: DeviceStateKey.expansionEnabled)
+            }
+            if Self.sharedPart(of: settings) != Self.sharedPart(of: oldValue) {
+                scheduleSave()
+            }
+        }
+    }
+
+    /// 동기화 파일이 권위인 부분만 남긴 설정. 장치-로컬 필드는 고정값으로 지운다.
+    static func sharedPart(of settings: AppSettings) -> AppSettings {
+        var shared = settings
+        shared.expansionEnabled = true
+        return shared
+    }
     /// 장치-로컬. 파일이 아니라 UserDefaults가 권위다.
     @Published public private(set) var expansionCount: Int
     /// 장치-로컬. 접근성 권한이 Mac마다 따로 승인되므로, 라이브러리를 물려받은
@@ -250,11 +271,15 @@ public final class Store: ObservableObject {
             public let backspaces: Int
             /// 확장된 내용 뒤에 다시 찍어야 할 종결자. 구두점 시작 약어는 "".
             public let terminator: String
+            /// 사용자가 실제로 친 약어(종결자 제외). 대소문자 무시 매치에서는 저장된
+            /// 약어와 다를 수 있다 — 대소문자 따라가기(`CaseAdapter`)가 이 값을 쓴다.
+            public let typed: String
 
-            public init(snippet: Snippet, backspaces: Int, terminator: String) {
+            public init(snippet: Snippet, backspaces: Int, terminator: String, typed: String = "") {
                 self.snippet = snippet
                 self.backspaces = backspaces
                 self.terminator = terminator
+                self.typed = typed
             }
         }
 
@@ -299,7 +324,8 @@ public final class Store: ObservableObject {
                 let start = n - len
                 if let snippet = lookup(chars, start..<n),
                    !Self.isWordCharacter(chars[start]) {
-                    return Match(snippet: snippet, backspaces: len, terminator: "")
+                    return Match(snippet: snippet, backspaces: len, terminator: "",
+                                 typed: String(chars[start..<n]))
                 }
 
                 // (2) 맨몸 약어 — <경계><약어><종결자> 로 끝나야 발화.
@@ -317,7 +343,8 @@ public final class Store: ObservableObject {
                     return Match(
                         snippet: snippet,
                         backspaces: len + terminator.count,
-                        terminator: terminator
+                        terminator: terminator,
+                        typed: String(chars[abbrevStart..<abbrevEnd])
                     )
                 }
             }
@@ -454,7 +481,17 @@ public final class Store: ObservableObject {
         let loaded = Self.loadFrom(location)
         self.groups = loaded.groups
         self.macros = loaded.macros
-        self.settings = loaded.settings
+        // 확장 켜기/끄기 시드도 온보딩과 같은 이유로 **위치 인식**이다. 로컬 파일의 값은
+        // 이 Mac 자신의 선택이었으니 업그레이드해도 이어받고, 동기화 파일의 값은 다른
+        // Mac의 선택일 수 있으니 따르지 않는다(새 Mac은 켜진 채로 시작한다).
+        var initialSettings = loaded.settings
+        initialSettings.expansionEnabled = Self.seededBool(
+            deviceDefaults,
+            key: DeviceStateKey.expansionEnabled,
+            seed: location.expectsExistingLibrary ? nil : loaded.fileExpansionEnabled,
+            default: true
+        )
+        self.settings = initialSettings
         self.loadFailure = loaded.loadFailure
         self.isLibraryUnavailable = loaded.unavailable
         self.remoteChange = nil
@@ -512,6 +549,7 @@ public final class Store: ObservableObject {
         var blocked: SaveOutcome?
         var fileExpansionCount: Int?
         var fileDidFinishOnboarding: Bool?
+        var fileExpansionEnabled: Bool?
     }
 
     /// 테스트 전용 훅. `loadFrom`가 파일을 읽기 **직전**에 호출된다. 프로덕션에서는
@@ -544,6 +582,7 @@ public final class Store: ObservableObject {
                 out.contentDigest = contentDigest(groups: data.groups, macros: data.macros, settings: data.settings)
                 out.fileExpansionCount = data.expansionCount
                 out.fileDidFinishOnboarding = data.settings.didFinishOnboarding
+                out.fileExpansionEnabled = data.settings.expansionEnabled
                 if data.version > StoreData.currentVersion {
                     // 더 새로운 빌드의 Mac이 쓴 파일이다. 지금은 무해해 보이지만,
                     // 우리 스키마로 다시 쓰는 순간 우리가 모르는 필드가 조용히
@@ -599,9 +638,9 @@ public final class Store: ObservableObject {
         return seed
     }
 
-    private static func seededBool(_ defaults: UserDefaults, key: String, seed: Bool?) -> Bool {
+    private static func seededBool(_ defaults: UserDefaults, key: String, seed: Bool?, default fallback: Bool = false) -> Bool {
         if let existing = defaults.object(forKey: key) as? Bool { return existing }
-        guard let seed else { return false }
+        guard let seed else { return fallback }
         defaults.set(seed, forKey: key)
         return seed
     }
@@ -617,7 +656,7 @@ public final class Store: ObservableObject {
     ) -> String {
         let probe = StoreData(
             version: StoreData.currentVersion,
-            groups: groups, macros: macros, settings: settings,
+            groups: groups, macros: macros, settings: sharedPart(of: settings),
             expansionCount: 0
         )
         let raw = (try? JSONEncoder.snipKey.encode(probe)) ?? Data()
@@ -713,7 +752,7 @@ public final class Store: ObservableObject {
         setLastKnownDigest(.sha(Self.sha256(of: raw)))
         setLastKnownContentDigest(Self.contentDigest(groups: decoded.groups, macros: decoded.macros, settings: decoded.settings))
         setBlockedReason(nil)
-        settings = decoded.settings
+        settings = withDeviceLocalSettings(decoded.settings)
         macros = decoded.macros
         // expansionCount는 여기서 읽지 않는다 — 파일의 값은 다른 Mac의 숫자이고,
         // 이 Mac의 진짜 값은 UserDefaults에 있다.
@@ -789,6 +828,13 @@ public final class Store: ObservableObject {
 
     /// 로드 결과를 @Published 상태에 반영한다. 저장은 억제한다. init이 아니라
     /// 재배치·리로드에서 쓴다. 확장 횟수(장치-로컬)는 손대지 않는다.
+    /// 디스크에서 읽은 설정에 이 Mac의 장치-로컬 값을 덮어쓴다.
+    private func withDeviceLocalSettings(_ fromDisk: AppSettings) -> AppSettings {
+        var merged = fromDisk
+        merged.expansionEnabled = settings.expansionEnabled
+        return merged
+    }
+
     private func applyLoaded(_ loaded: Loaded) {
         isApplyingExternalState = true
         defer { isApplyingExternalState = false }
@@ -798,7 +844,7 @@ public final class Store: ObservableObject {
         loadFailure = loaded.loadFailure
         isLibraryUnavailable = loaded.unavailable
         remoteChange = nil
-        settings = loaded.settings
+        settings = withDeviceLocalSettings(loaded.settings)
         macros = loaded.macros
         groups = loaded.groups // 마지막: didSet이 matcher를 다시 세운다 (저장은 억제됨)
     }
@@ -1121,7 +1167,15 @@ public final class Store: ObservableObject {
         groups.flatMap(\.snippets)
     }
 
+    /// `%snippet:X%` 중첩 조회. 먼저 실제 확장과 **같은 색인**(켜진 스니펫, 대소문자
+    /// 설정 반영, 같은 약어가 겹치면 같은 승자)으로 찾는다 — 사용자가 `X`를 직접 쳤을 때
+    /// 나오는 스니펫과 중첩으로 불렀을 때 나오는 스니펫이 달라서는 안 된다.
+    /// 거기 없으면 예전 규칙(켜진 그룹의 첫 번째 정확 일치)으로 물러난다.
     public func snippet(forAbbreviation abbrev: String) -> Snippet? {
+        let index = matcher
+        if let s = index.exact[abbrev] ?? index.insensitive[abbrev.lowercased()] {
+            return s
+        }
         for group in groups where group.enabled {
             if let s = group.snippets.first(where: { $0.abbreviation == abbrev }) {
                 return s
@@ -1213,7 +1267,7 @@ public final class Store: ObservableObject {
         for group in groups where group.enabled {
             for s in group.snippets where s.enabled && !s.abbreviation.isEmpty {
                 maxLen = max(maxLen, s.abbreviation.count)
-                if s.caseSensitive {
+                if !s.matchesCaseInsensitively {
                     exact[s.abbreviation] = s
                 } else {
                     insensitive[s.abbreviation.lowercased()] = s

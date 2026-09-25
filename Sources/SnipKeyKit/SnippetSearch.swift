@@ -107,8 +107,10 @@ public enum SnippetSearch {
 
 extension Store {
 
-    public func search(_ query: String, limit: Int? = nil) -> [SearchHit] {
-        SnippetSearch.run(query: query, in: groups, limit: limit)
+    /// `includeDisabled: false`는 ⌘/ 팔레트용이다 — 거기서 고르면 바로 확장되므로,
+    /// 꺼 둔 스니펫이나 꺼 둔 그룹의 스니펫이 나오면 안 된다. 편집기 검색은 전부 보여 준다.
+    public func search(_ query: String, includeDisabled: Bool = true, limit: Int? = nil) -> [SearchHit] {
+        SnippetSearch.run(query: query, in: groups, includeDisabled: includeDisabled, limit: limit)
     }
 
     /// Abbreviations that more than one enabled snippet claims. Two snippets with
@@ -118,7 +120,7 @@ extension Store {
         var seen: [String: Int] = [:]
         for group in groups where group.enabled {
             for snippet in group.snippets where snippet.enabled && !snippet.abbreviation.isEmpty {
-                let key = snippet.caseSensitive ? snippet.abbreviation : snippet.abbreviation.lowercased()
+                let key = snippet.matchesCaseInsensitively ? snippet.abbreviation.lowercased() : snippet.abbreviation
                 seen[key, default: 0] += 1
             }
         }

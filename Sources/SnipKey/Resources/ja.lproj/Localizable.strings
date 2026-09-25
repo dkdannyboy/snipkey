@@ -89,6 +89,8 @@
 "editor.enabled" = "有効";
 "editor.caseSensitive" = "大文字と小文字を区別";
 "editor.caseSensitive.help" = "オフにすると ;SIG と ;sig の両方が展開されます";
+"editor.adaptCase" = "大文字小文字に合わせる";
+"editor.adaptCase.help" = ";Sig と入力すると先頭だけ、;SIG ならすべて大文字になります";
 "editor.insertMacro" = "マクロを挿入";
 "editor.content" = "内容";
 "editor.dates" = "作成 %@ · 変更 %@";
@@ -185,6 +187,7 @@
 "settings.sync.savePanel.message" = "クラウドサービスが同期するフォルダ（例: iCloud Drive内のフォルダ）を選択してください。";
 "settings.sync.savedMessage" = "スニペット%d個を%@に保存しました。SnipKeyは以後そこから同期します。以前のローカルコピーはそのまま残ります。";
 "settings.sync.saveFailed" = "そこに保存できませんでした: %@。";
+"settings.sync.linkFailed" = "そのライブラリにリンクできませんでした: %@。現在のライブラリはそのままです。";
 "settings.sync.linkPanel.prompt" = "リンク";
 "settings.sync.linkPanel.message" = "同期フォルダ内にある既存のSnipKeyスニペットファイルを選択してください。";
 "settings.sync.nowSyncing" = "以後%@から同期します。";
@@ -298,3 +301,14 @@
 
 /* MARK: 이주 안내 */
 "warn.textExpanderRunning" = "TextExpanderがまだ実行中です。終了しないと、両方のアプリが展開して2回入力されます。";
+
+/* 앱별 제외 · 되돌리기 */
+"status.excludeApp" = "%@ では展開しない";
+"status.secureInput" = "別のアプリでセキュア入力がオンのため、展開を停止しています";
+"settings.general.undoWithBackspace" = "Backspace で展開を取り消す";
+"settings.general.undoWithBackspace.help" = "展開直後に Backspace を押すと、入力した略語に戻します";
+"settings.excluded.header" = "除外するアプリ";
+"settings.excluded.footer" = "これらのアプリでは展開しません。メニューバーから使用中のアプリを切り替えることもできます。";
+"settings.excluded.empty" = "除外するアプリはありません";
+"settings.excluded.add" = "アプリを追加…";
+"settings.excluded.remove" = "削除";

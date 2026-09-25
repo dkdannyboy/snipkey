@@ -9,6 +9,10 @@ public struct Snippet: Codable, Identifiable, Hashable {
     public var label: String
     /// When false, the abbreviation matches regardless of letter case.
     public var caseSensitive: Bool
+    /// 입력한 약어의 대소문자를 결과에 옮긴다(`CaseAdapter`). 켜면 매칭은 대소문자를
+    /// 가리지 않는다 — ;Sig와 ;SIG를 구분해 받아야 옮길 수 있기 때문이다.
+    /// 옛 파일에는 이 키가 없으므로 false로 읽는다.
+    public var adaptCase: Bool
     public var enabled: Bool
     public var createdAt: Date
     public var modifiedAt: Date
@@ -19,6 +23,7 @@ public struct Snippet: Codable, Identifiable, Hashable {
         content: String,
         label: String = "",
         caseSensitive: Bool = true,
+        adaptCase: Bool = false,
         enabled: Bool = true,
         createdAt: Date = Date(),
         modifiedAt: Date = Date()
@@ -28,6 +33,7 @@ public struct Snippet: Codable, Identifiable, Hashable {
         self.content = content
         self.label = label
         self.caseSensitive = caseSensitive
+        self.adaptCase = adaptCase
         self.enabled = enabled
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
@@ -36,6 +42,44 @@ public struct Snippet: Codable, Identifiable, Hashable {
     /// Display title used in lists: label if present, else the abbreviation.
     public var displayTitle: String {
         label.isEmpty ? abbreviation : label
+    }
+
+    /// 매칭 색인에서 대소문자를 무시하는가. 색인·충돌 검사·편집기가 모두 이 규칙 하나를 쓴다.
+    public var matchesCaseInsensitively: Bool {
+        !caseSensitive || adaptCase
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, abbreviation, content, label, caseSensitive, adaptCase, enabled, createdAt, modifiedAt
+    }
+
+    // 기존 키는 예전처럼 필수로 두고(엄격함 보존), 새 키 adaptCase만 없어도 된다.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        abbreviation = try c.decode(String.self, forKey: .abbreviation)
+        content = try c.decode(String.self, forKey: .content)
+        label = try c.decode(String.self, forKey: .label)
+        caseSensitive = try c.decode(Bool.self, forKey: .caseSensitive)
+        adaptCase = try c.decodeIfPresent(Bool.self, forKey: .adaptCase) ?? false
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        modifiedAt = try c.decode(Date.self, forKey: .modifiedAt)
+    }
+
+    // adaptCase는 켜져 있을 때만 쓴다. 이 기능을 안 쓰는 사용자의 동기화 파일이
+    // 업데이트 한 번으로 스니펫 수만큼 바뀌어, 다른 Mac에 충돌 경고를 띄우는 일이 없게.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(abbreviation, forKey: .abbreviation)
+        try c.encode(content, forKey: .content)
+        try c.encode(label, forKey: .label)
+        try c.encode(caseSensitive, forKey: .caseSensitive)
+        if adaptCase { try c.encode(true, forKey: .adaptCase) }
+        try c.encode(enabled, forKey: .enabled)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(modifiedAt, forKey: .modifiedAt)
     }
 }
 
@@ -128,6 +172,13 @@ public struct AppSettings: Codable, Hashable {
     public var inlineSearchKeyCode: UInt32
     public var inlineSearchModifiers: UInt32
 
+    /// 확장하지 않을 앱의 번들 ID(예: "com.apple.Terminal"). 터미널·IDE·비밀번호 관리자처럼
+    /// 약어가 명령어나 코드와 겹치는 곳에서 끈다. 같은 앱은 Mac마다 같은 번들 ID이므로
+    /// 라이브러리와 함께 동기화한다.
+    public var excludedBundleIDs: [String]
+    /// 확장 직후 백스페이스를 누르면 입력했던 약어로 되돌린다(`ExpansionUndo`).
+    public var undoWithBackspace: Bool
+
     public init(
         expansionEnabled: Bool = true,
         playSoundOnExpand: Bool = true,
@@ -135,7 +186,9 @@ public struct AppSettings: Codable, Hashable {
         clipboardRestoreDelay: Double = 0.35,
         inlineSearchEnabled: Bool = true,
         inlineSearchKeyCode: UInt32 = 44,   // kVK_ANSI_Slash
-        inlineSearchModifiers: UInt32 = 256 // cmdKey
+        inlineSearchModifiers: UInt32 = 256, // cmdKey
+        excludedBundleIDs: [String] = [],
+        undoWithBackspace: Bool = true
     ) {
         self.expansionEnabled = expansionEnabled
         self.playSoundOnExpand = playSoundOnExpand
@@ -144,6 +197,13 @@ public struct AppSettings: Codable, Hashable {
         self.inlineSearchEnabled = inlineSearchEnabled
         self.inlineSearchKeyCode = inlineSearchKeyCode
         self.inlineSearchModifiers = inlineSearchModifiers
+        self.excludedBundleIDs = excludedBundleIDs
+        self.undoWithBackspace = undoWithBackspace
+    }
+
+    public func isExcluded(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return excludedBundleIDs.contains(bundleID)
     }
 
     // Older stores predate the inline-search keys; fall back to the defaults
@@ -158,6 +218,8 @@ public struct AppSettings: Codable, Hashable {
         inlineSearchEnabled = try c.decodeIfPresent(Bool.self, forKey: .inlineSearchEnabled) ?? defaults.inlineSearchEnabled
         inlineSearchKeyCode = try c.decodeIfPresent(UInt32.self, forKey: .inlineSearchKeyCode) ?? defaults.inlineSearchKeyCode
         inlineSearchModifiers = try c.decodeIfPresent(UInt32.self, forKey: .inlineSearchModifiers) ?? defaults.inlineSearchModifiers
+        excludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs) ?? defaults.excludedBundleIDs
+        undoWithBackspace = try c.decodeIfPresent(Bool.self, forKey: .undoWithBackspace) ?? defaults.undoWithBackspace
     }
 }
 

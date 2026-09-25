@@ -90,6 +90,8 @@
 "editor.enabled" = "Enabled";
 "editor.caseSensitive" = "Case sensitive";
 "editor.caseSensitive.help" = "When off, ;SIG and ;sig both expand";
+"editor.adaptCase" = "Adapt case";
+"editor.adaptCase.help" = "Type ;Sig for \"Best regards\", ;SIG for \"BEST REGARDS\"";
 "editor.insertMacro" = "Insert Macro";
 "editor.content" = "Content";
 "editor.dates" = "Created %@ · Modified %@";
@@ -186,6 +188,7 @@
 "settings.sync.savePanel.message" = "Choose a folder your cloud service syncs (e.g. a folder in iCloud Drive).";
 "settings.sync.savedMessage" = "Saved %d snippets to %@. SnipKey now syncs from there; your previous local copy is left untouched.";
 "settings.sync.saveFailed" = "Could not save there: %@.";
+"settings.sync.linkFailed" = "Could not link to that library: %@. Your current library is unchanged.";
 "settings.sync.linkPanel.prompt" = "Link";
 "settings.sync.linkPanel.message" = "Choose the existing SnipKey snippet file in your synced folder.";
 "settings.sync.nowSyncing" = "Now syncing from %@.";
@@ -299,3 +302,14 @@
 
 /* MARK: 이주 안내 */
 "warn.textExpanderRunning" = "TextExpander is still running. Quit it, or each expansion will fire twice — once from each app.";
+
+/* 앱별 제외 · 되돌리기 */
+"status.excludeApp" = "Don't Expand in %@";
+"status.secureInput" = "Secure input is on in another app — expansion paused";
+"settings.general.undoWithBackspace" = "Undo an expansion with Backspace";
+"settings.general.undoWithBackspace.help" = "Pressing Backspace right after an expansion puts back the abbreviation you typed";
+"settings.excluded.header" = "Excluded apps";
+"settings.excluded.footer" = "SnipKey never expands in these apps. You can also toggle the app you are using from the menu bar.";
+"settings.excluded.empty" = "No excluded apps";
+"settings.excluded.add" = "Add App…";
+"settings.excluded.remove" = "Remove";

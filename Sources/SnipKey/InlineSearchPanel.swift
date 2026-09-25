@@ -146,7 +146,7 @@ private struct InlineSearchView: View {
                 .prefix(maxResults)
                 .map { $0 }
         }
-        return store.search(query, limit: maxResults)
+        return store.search(query, includeDisabled: false, limit: maxResults)
     }
 
     var body: some View {
