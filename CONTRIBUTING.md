@@ -12,7 +12,7 @@ not be "fixed".
 
 ```bash
 swift build          # build
-swift test           # 92 unit tests: parser, importer, matcher, key classifier
+swift test           # unit tests: parser, importer, matcher, key classifier, store sync
 ./scripts/build-app.sh --install   # build dist/SnipKey.app and install it
 ```
 

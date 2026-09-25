@@ -37,6 +37,13 @@ your Mac.
 - **Multi-Mac sync.** Keep the same library on several Macs through iCloud Drive
   or any sync folder — with guardrails that refuse to lose your snippets.
 - **Three languages.** English, 한국어, and 日本語, switchable instantly in Settings.
+- **Adapt case.** Type `;Sig` for "Best regards", `;SIG` for "BEST REGARDS".
+- **Undo with Backspace.** Press Backspace right after an expansion to get your
+  abbreviation back.
+- **Per-app exclusions.** Turn expansion off in Terminal, your IDE, or any app —
+  straight from the menu bar.
+- **Windows too (preview).** [SnipKey for Windows](windows/README.md) reads the
+  same library file, so one library can serve your Mac and your PC.
 - **Private by design.** No account, no telemetry, no network code at all.
 
 ## Why SnipKey?
@@ -139,6 +146,8 @@ SnipKey uses TextExpander's macro syntax, so imported snippets keep working.
 | `%snippet:;abbrev%` | Inserts another snippet (nested, up to 10 deep) |
 | `%clipboard` | Inserts the current clipboard text |
 | `%date:yyyy-MM-dd%` | Inserts the date or time in any `DateFormatter` format |
+| `%date:+1d:yyyy-MM-dd%` | Date math: `+`/`-` a number of `s` `m` `h` `d` `w` `M` `y` (minutes are `m`, months are `M`) |
+| `%Y` `%m` `%d` `%B` `%A` … `%@+1D` | TextExpander date codes, so imported snippets keep working |
 | <code>%&#124;</code> | Leaves the cursor here after expanding |
 | `%key:enter%` | Presses a key after expanding (`enter`, `tab`, `escape`, `space`) |
 
